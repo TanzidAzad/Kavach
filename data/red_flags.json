@@ -1,15 +1,70 @@
 {
   "en": [
     { "phrase": "gift card", "reason": "Government agencies never take gift cards" },
-    { "phrase": "you will be deported", "reason": "Threats of immediate deportation are a common scam tactic" }
+    { "phrase": "wire transfer", "reason": "No government agency demands payment by wire transfer" },
+    { "phrase": "western union", "reason": "USCIS does not accept Western Union for immigration fees" },
+    { "phrase": "moneygram", "reason": "USCIS does not accept MoneyGram for immigration fees" },
+    { "phrase": "bitcoin", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "cryptocurrency", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "zelle", "reason": "No government agency demands payment through a payment app" },
+    { "phrase": "pay immediately", "reason": "Scammers pressure you to pay right now" },
+    { "phrase": "you will be deported", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "arrest warrant", "reason": "Government agencies do not call or message you to threaten arrest" },
+    { "phrase": "within 24 hours", "reason": "Scammers set short deadlines to rush you" },
+    { "phrase": "guaranteed green card", "reason": "Nobody can guarantee an immigration result or give special access" },
+    { "phrase": "notario", "reason": "Notarios are not allowed to give immigration legal help" },
+    { "phrase": "expedite fee", "reason": "Only USCIS can decide to speed up a case" },
+    { "phrase": "lottery winner", "reason": "The State Department never emails people to say they won the visa lottery" }
   ],
   "es": [
-    { "phrase": "tarjeta de regalo", "reason": "Government agencies never take gift cards" }
+    { "phrase": "tarjeta de regalo", "reason": "Government agencies never take gift cards" },
+    { "phrase": "tarjetas de regalo", "reason": "Government agencies never take gift cards" },
+    { "phrase": "transferencia bancaria", "reason": "No government agency demands payment by wire transfer" },
+    { "phrase": "western union", "reason": "USCIS does not accept Western Union for immigration fees" },
+    { "phrase": "moneygram", "reason": "USCIS does not accept MoneyGram for immigration fees" },
+    { "phrase": "bitcoin", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "criptomoneda", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "zelle", "reason": "No government agency demands payment through a payment app" },
+    { "phrase": "pague hoy", "reason": "Scammers pressure you to pay right now" },
+    { "phrase": "será deportado", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "orden de arresto", "reason": "Government agencies do not call or message you to threaten arrest" },
+    { "phrase": "en 24 horas", "reason": "Scammers set short deadlines to rush you" },
+    { "phrase": "residencia garantizada", "reason": "Nobody can guarantee an immigration result or give special access" },
+    { "phrase": "notario", "reason": "Notarios are not allowed to give immigration legal help" },
+    { "phrase": "lotería de visas", "reason": "The State Department never emails people to say they won the visa lottery" }
   ],
   "hi": [
-    { "phrase": "गिफ्ट कार्ड", "reason": "Government agencies never take gift cards" }
+    { "phrase": "गिफ्ट कार्ड", "reason": "Government agencies never take gift cards" },
+    { "phrase": "वायर ट्रांसफर", "reason": "No government agency demands payment by wire transfer" },
+    { "phrase": "वेस्टर्न यूनियन", "reason": "USCIS does not accept Western Union for immigration fees" },
+    { "phrase": "बिटकॉइन", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "क्रिप्टो", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "तुरंत भुगतान", "reason": "Scammers pressure you to pay right now" },
+    { "phrase": "अभी भुगतान करें", "reason": "Scammers pressure you to pay right now" },
+    { "phrase": "निर्वासित", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "डिपोर्ट", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "गिरफ्तारी वारंट", "reason": "Government agencies do not call or message you to threaten arrest" },
+    { "phrase": "गिरफ्तार", "reason": "Government agencies do not call or message you to threaten arrest" },
+    { "phrase": "24 घंटे", "reason": "Scammers set short deadlines to rush you" },
+    { "phrase": "जुर्माना", "reason": "Government agencies do not demand fines by phone or message" },
+    { "phrase": "ग्रीन कार्ड की गारंटी", "reason": "Nobody can guarantee an immigration result or give special access" },
+    { "phrase": "वीज़ा लॉटरी", "reason": "The State Department never emails people to say they won the visa lottery" }
   ],
   "zh": [
-    { "phrase": "礼品卡", "reason": "Government agencies never take gift cards" }
+    { "phrase": "礼品卡", "reason": "Government agencies never take gift cards" },
+    { "phrase": "电汇", "reason": "No government agency demands payment by wire transfer" },
+    { "phrase": "转账", "reason": "USCIS never asks you to transfer money to an individual" },
+    { "phrase": "西联汇款", "reason": "USCIS does not accept Western Union for immigration fees" },
+    { "phrase": "速汇金", "reason": "USCIS does not accept MoneyGram for immigration fees" },
+    { "phrase": "比特币", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "加密货币", "reason": "No government agency demands payment in cryptocurrency" },
+    { "phrase": "立即付款", "reason": "Scammers pressure you to pay right now" },
+    { "phrase": "驱逐出境", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "遣返", "reason": "Scammers threaten deportation to scare you into paying" },
+    { "phrase": "逮捕令", "reason": "Government agencies do not call or message you to threaten arrest" },
+    { "phrase": "24小时内", "reason": "Scammers set short deadlines to rush you" },
+    { "phrase": "罚款", "reason": "Government agencies do not demand fines by phone or message" },
+    { "phrase": "包过", "reason": "Nobody can guarantee an immigration result or give special access" },
+    { "phrase": "绿卡抽签", "reason": "The State Department never emails people to say they won the visa lottery" }
   ]
 }

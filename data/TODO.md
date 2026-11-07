@@ -17,10 +17,11 @@ Branch: `data`. Source: PRD section 9 (Role 4), in order.
 - [x] 3. `data/guidance.json`: 15–20 short facts from official scam pages (USCIS scams page, FTC immigration scams, IRS impersonation page), each with a source URL.
 - [x] 4. `data/red_flags.json`: ~15 phrases per language (en, es, hi, zh). Have native speakers check es/hi/zh.
   - [ ] Native speaker check: es, hi, zh phrases (ask on the team or at the event)
-- [ ] 5. `data/demo_messages.json`: 8 messages
-  - [ ] 5 scams: USCIS/WhatsApp (Spanish), IRS gift card (English), fake lawyer/"notario" (Spanish), ICE threat (Hindi), lookalike link (Chinese)
-  - [ ] 1 suspicious
-  - [ ] 2 real/safe ones
+- [x] 5. `data/demo_messages.json`: 8 messages
+  - [x] 5 scams: USCIS/WhatsApp (Spanish), IRS gift card (English), fake lawyer/"notario" (Spanish), ICE threat (Hindi), lookalike link (Chinese)
+  - [x] 1 suspicious
+  - [x] 2 real/safe ones
+  - [ ] Native speaker check: hi-ice-threat and zh-lookalike-link wording
 - [ ] 6. `demo/`: 2–3 realistic phone screenshots (WhatsApp/SMS style) of the demo scams. Made-up numbers/names only.
 - [ ] 7. `data/ui_strings.json`: every UI label in English (get the final list from Role 1).
 - [ ] 8. `eval/run_eval.js`: run Quick Check (and Deep Check on ~50 if time) on T-Mobile's synthetic set; write accuracy vs their baseline to `eval/results.md`. Be honest about what was measured.

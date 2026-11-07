@@ -2,15 +2,57 @@
   {
     "id": "es-uscis-whatsapp",
     "lang": "es",
-    "text": "USCIS: Su caso ABC123 tiene un problema. Pague $500 en tarjetas de regalo hoy o será deportado. Responda por WhatsApp.",
+    "text": "USCIS AVISO: Su caso IOE-55821 tiene un problema y su solicitud será cancelada. Debe pagar una multa de $480 en tarjetas de regalo en 24 horas o será deportado. Responda a este WhatsApp para recibir instrucciones. Oficial Ramírez.",
     "expected": "scam",
-    "notes": "Placeholder. WhatsApp channel + invalid case number + gift cards."
+    "notes": "Main demo. WhatsApp channel (USCIS doesn't use personal social media), invalid case number format, gift cards, 24-hour deadline, deportation threat."
+  },
+  {
+    "id": "en-irs-giftcard",
+    "lang": "en",
+    "text": "IRS NOTICE: You owe $1,920 in back taxes. An arrest warrant has been issued in your name. To cancel it you must pay immediately with Target or Apple gift cards. Call Officer Daniel Brooks at (202) 555-0123 within 24 hours.",
+    "expected": "scam",
+    "notes": "Offline demo. IRS first contacts by mail, never demands gift cards, arrest threat, urgency. Phone number is fictional (555-01xx)."
+  },
+  {
+    "id": "es-notario",
+    "lang": "es",
+    "text": "¡Notario Público Hernández! Le ayudamos con su residencia garantizada en 3 meses. Tenemos contactos especiales en inmigración. Solo $2,500 por transferencia bancaria o Zelle. Traiga sus documentos originales, nosotros los guardamos. Llame al (210) 555-0147.",
+    "expected": "scam",
+    "notes": "Fake lawyer. Notarios can't give legal help, nobody can guarantee results or special access, wire/payment app, keeping original documents. Phone is fictional."
+  },
+  {
+    "id": "hi-ice-threat",
+    "lang": "hi",
+    "text": "ICE चेतावनी: आपके इमिग्रेशन रिकॉर्ड में गड़बड़ी है। आपके नाम पर गिरफ्तारी वारंट जारी हुआ है। अगर आप 24 घंटे में $1,500 जुर्माना बिटकॉइन से नहीं भरते, तो आपको डिपोर्ट कर दिया जाएगा। तुरंत इस नंबर पर संपर्क करें: (469) 555-0182",
+    "expected": "scam",
+    "notes": "ICE impersonation. Arrest warrant threat, 24-hour deadline, fine paid in bitcoin, deportation threat. Phone is fictional. Needs a Hindi speaker to check wording."
+  },
+  {
+    "id": "zh-lookalike-link",
+    "lang": "zh",
+    "text": "【美国移民局】您的绿卡申请材料不完整。请在24小时内登录 https://uscis-gov.case-update.example 核实身份并支付补办费用，否则您的申请将被拒绝，您可能被遣返。",
+    "expected": "scam",
+    "notes": "Lookalike link: contains 'uscis' but isn't uscis.gov (.example is a reserved, never-real domain). Plus 24-hour deadline and deportation threat. Needs a Chinese speaker to check wording."
+  },
+  {
+    "id": "en-expedite-offer",
+    "lang": "en",
+    "text": "Hi, this is Maria from the Immigration Help Center. Your green card renewal is coming up. We can get it processed faster for an expedite fee of $350. Reply YES and we'll send the details.",
+    "expected": "suspicious",
+    "notes": "Only one red flag: paid 'expedite' (only USCIS can decide to speed up a case). No threat, no gift cards, so it should be suspicious, not scam."
   },
   {
     "id": "en-uscis-real",
     "lang": "en",
     "text": "Your case status has been updated. Sign in to your USCIS online account to see the details.",
     "expected": "safe",
-    "notes": "Placeholder. No payment, no threat, points to the official account."
+    "notes": "Real-style USCIS update. No payment, no threat, no link, points to the official account. Should come back safe with confidence 'unsure', never 'high'."
+  },
+  {
+    "id": "es-uscis-real",
+    "lang": "es",
+    "text": "Hubo una actualización en el estado de su caso. Inicie sesión en su cuenta en línea de USCIS para ver los detalles.",
+    "expected": "safe",
+    "notes": "Spanish version of the real-style update, to show we don't flag every Spanish message."
   }
 ]

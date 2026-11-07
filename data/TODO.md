@@ -25,7 +25,11 @@ Branch: `data`. Source: PRD section 9 (Role 4), in order.
 - [x] 6. `demo/`: 2–3 realistic phone screenshots (WhatsApp/SMS style) of the demo scams. Made-up numbers/names only.
 - [x] 7. `data/ui_strings.json`: every UI label in English (get the final list from Role 1).
   - [ ] Confirm with Role 1 when their popup is final (their TODO item 13) and add any new labels
-- [ ] 8. `eval/run_eval.js`: run Quick Check (and Deep Check on ~50 if time) on T-Mobile's synthetic set; write accuracy vs their baseline to `eval/results.md`. Be honest about what was measured.
+- [x] 8. `eval/run_eval.js`: run Quick Check (and Deep Check on ~50 if time) on T-Mobile's synthetic set; write accuracy vs their baseline to `eval/results.md`. Be honest about what was measured.
+  - Using our own 40-message set (`eval/test_messages.json`), no T-Mobile set
+  - [ ] Re-run `node eval/run_eval.js` after Role 2 merges the real Quick Check — current numbers are from the stub
+  - [ ] Native speaker check: hi and zh test messages
+  - [ ] (if time) Deep Check on a sample
 - [ ] 9. Devpost write-up, 5-slide deck (problem + stats → demo → how it works → accuracy → what's next), demo script.
 - [ ] 10. Record the ≤2-min demo video **by 10 AM Sun**.
 

@@ -1,0 +1,15 @@
+{
+  "en": [
+    { "phrase": "gift card", "reason": "Government agencies never take gift cards" },
+    { "phrase": "you will be deported", "reason": "Threats of immediate deportation are a common scam tactic" }
+  ],
+  "es": [
+    { "phrase": "tarjeta de regalo", "reason": "Government agencies never take gift cards" }
+  ],
+  "hi": [
+    { "phrase": "गिफ्ट कार्ड", "reason": "Government agencies never take gift cards" }
+  ],
+  "zh": [
+    { "phrase": "礼品卡", "reason": "Government agencies never take gift cards" }
+  ]
+}

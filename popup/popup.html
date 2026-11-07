@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kavach</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="brand">🛡 Kavach</span>
+    <select id="lang" aria-label="Language">
+      <option value="en">English</option>
+      <option value="es">Español</option>
+      <option value="hi">हिन्दी</option>
+      <option value="zh">中文</option>
+    </select>
+  </header>
+
+  <main>
+    <section id="input-view">
+      <textarea id="message" rows="6" placeholder="Paste a message…"></textarea>
+      <label class="upload">📎 Upload screenshot
+        <input id="screenshot" type="file" accept="image/*" hidden>
+      </label>
+      <button id="check" class="primary">Check</button>
+    </section>
+
+    <section id="result-view" hidden>
+      <div id="verdict-line" class="verdict">
+        <span id="verdict-label"></span>
+        <span id="confidence" class="confidence"></span>
+      </div>
+
+      <div id="reasons-block">
+        <p class="heading">Why:</p>
+        <ul id="reasons"></ul>
+      </div>
+
+      <div id="checklist-block" hidden>
+        <p class="heading">Checking…</p>
+        <ul id="checklist"></ul>
+      </div>
+
+      <p class="heading">What to do:</p>
+      <ol id="steps"></ol>
+
+      <div class="buttons">
+        <button id="ask-family">Ask family</button>
+        <button id="deep-check">Deep check →</button>
+      </div>
+    </section>
+
+    <p id="status" class="status"></p>
+  </main>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

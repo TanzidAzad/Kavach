@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Kavach",
+  "version": "0.1.0",
+  "description": "Catches scam messages in any language and explains them in yours.",
+  "action": {
+    "default_title": "Kavach",
+    "default_popup": "popup/popup.html"
+  }
+}

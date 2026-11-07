@@ -1,0 +1,16 @@
+[
+  {
+    "id": "es-uscis-whatsapp",
+    "lang": "es",
+    "text": "USCIS: Su caso ABC123 tiene un problema. Pague $500 en tarjetas de regalo hoy o será deportado. Responda por WhatsApp.",
+    "expected": "scam",
+    "notes": "Placeholder. WhatsApp channel + invalid case number + gift cards."
+  },
+  {
+    "id": "en-uscis-real",
+    "lang": "en",
+    "text": "Your case status has been updated. Sign in to your USCIS online account to see the details.",
+    "expected": "safe",
+    "notes": "Placeholder. No payment, no threat, points to the official account."
+  }
+]

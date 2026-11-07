@@ -1,0 +1,18 @@
+[
+  {
+    "agency": "USCIS",
+    "channels": ["mail", "myUSCIS account"],
+    "neverAsksFor": ["gift cards", "crypto", "wire transfer"],
+    "url": "https://www.uscis.gov/",
+    "phone": "TODO: copy verified number from uscis.gov",
+    "source": "https://www.uscis.gov/"
+  },
+  {
+    "agency": "IRS",
+    "channels": ["mail"],
+    "neverAsksFor": ["gift cards", "crypto", "wire transfer"],
+    "url": "https://www.irs.gov/",
+    "phone": "TODO: copy verified number from irs.gov",
+    "source": "https://www.irs.gov/"
+  }
+]

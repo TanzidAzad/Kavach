@@ -1,0 +1,14 @@
+[
+  {
+    "id": "uscis-gift-cards",
+    "text": "USCIS will never ask for payment by gift card.",
+    "keywords": ["gift card", "uscis", "payment"],
+    "source": "https://www.uscis.gov/"
+  },
+  {
+    "id": "irs-gift-cards",
+    "text": "The IRS does not demand payment by gift card.",
+    "keywords": ["gift card", "irs", "payment"],
+    "source": "https://www.irs.gov/"
+  }
+]

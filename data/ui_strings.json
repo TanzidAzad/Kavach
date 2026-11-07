@@ -1,0 +1,20 @@
+{
+  "appName": "Kavach",
+  "pasteMessage": "Paste a message…",
+  "uploadScreenshot": "Upload screenshot",
+  "check": "Check",
+  "scam": "SCAM",
+  "suspicious": "SUSPICIOUS",
+  "safe": "LOOKS SAFE",
+  "confidence": "Confidence",
+  "high": "High",
+  "medium": "Medium",
+  "unsure": "Unsure",
+  "why": "Why:",
+  "whatToDo": "What to do:",
+  "askFamily": "Ask family",
+  "deepCheck": "Deep check →",
+  "checking": "Checking…",
+  "copied": "Copied ✓",
+  "offline": "offline"
+}

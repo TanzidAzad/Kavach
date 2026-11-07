@@ -1,14 +1,122 @@
 [
   {
-    "id": "uscis-gift-cards",
-    "text": "USCIS will never ask for payment by gift card.",
-    "keywords": ["gift card", "uscis", "payment"],
-    "source": "https://www.uscis.gov/"
+    "id": "uscis-payment-methods",
+    "text": "USCIS does not accept Western Union, MoneyGram, PayPal, Venmo, or gift cards as payment for immigration fees.",
+    "keywords": ["uscis", "gift card", "western union", "moneygram", "paypal", "venmo", "fee", "payment"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
   },
   {
-    "id": "irs-gift-cards",
-    "text": "The IRS does not demand payment by gift card.",
-    "keywords": ["gift card", "irs", "payment"],
-    "source": "https://www.irs.gov/"
+    "id": "uscis-pay-only-myuscis",
+    "text": "USCIS will never ask you to transfer money to an individual or pay fees other than through your myUSCIS account.",
+    "keywords": ["uscis", "transfer", "money", "fee", "payment", "myuscis", "account"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "uscis-no-phone-email-payment",
+    "text": "USCIS will never ask you to pay fees to a person on the phone or by email.",
+    "keywords": ["uscis", "phone", "call", "email", "fee", "pay", "payment"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "uscis-no-social-media",
+    "text": "USCIS will not contact you through your personal social media accounts.",
+    "keywords": ["uscis", "social media", "whatsapp", "facebook", "instagram", "message"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "gov-email-domain",
+    "text": "Email addresses from the U.S. government always end in .gov.",
+    "keywords": ["email", "gov", "address", "uscis", "government"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "fake-uscis-website",
+    "text": "Scam websites pretend to be USCIS, such as uscis-online.org, which is not a government website.",
+    "keywords": ["website", "link", "uscis", "download", "fake", "online"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "notario-not-lawyer",
+    "text": "In the United States, notary publics (notarios) are not authorized to provide legal services.",
+    "keywords": ["notario", "notary", "lawyer", "legal", "immigration help"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "who-can-give-legal-advice",
+    "text": "Only attorneys and people accredited by the U.S. Department of Justice can give you immigration legal advice.",
+    "keywords": ["lawyer", "attorney", "legal advice", "accredited", "notario", "consultant"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "uscis-forms-free",
+    "text": "The official forms from USCIS are free.",
+    "keywords": ["form", "forms", "free", "uscis", "pay", "fee"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "no-blank-forms",
+    "text": "Don't sign blank immigration forms, or forms that have false information about you.",
+    "keywords": ["sign", "blank", "form", "false information", "notario"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "keep-original-documents",
+    "text": "Don't let a notario or anyone else keep your original documents.",
+    "keywords": ["documents", "original", "passport", "notario", "keep"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "visa-lottery-free",
+    "text": "You don't have to pay to apply for the visa lottery, and nobody can increase your chance of winning.",
+    "keywords": ["visa lottery", "lottery", "green card", "winner", "selected", "pay"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "only-uscis-expedites",
+    "text": "Only USCIS can decide whether to speed up (expedite) a case.",
+    "keywords": ["expedite", "faster", "speed up", "priority", "uscis", "case"],
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
+  },
+  {
+    "id": "immigration-help-payment",
+    "text": "Never pay for immigration help with a gift card, money transfer, payment app, or cryptocurrency.",
+    "keywords": ["gift card", "money transfer", "payment app", "cryptocurrency", "crypto", "bitcoin", "zelle", "immigration"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-immigration-scams-and-get-real-help"
+  },
+  {
+    "id": "gov-payment-methods",
+    "text": "No government agency will demand you wire money or pay with gift cards, cryptocurrency, or a payment app.",
+    "keywords": ["wire", "gift card", "cryptocurrency", "crypto", "payment app", "government", "pay"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-government-impersonator-scam"
+  },
+  {
+    "id": "gov-no-unsolicited-money-requests",
+    "text": "Government agencies will never call, email, text, or message you on social media to ask for money or personal information.",
+    "keywords": ["call", "email", "text", "social media", "money", "personal information", "government"],
+    "source": "https://consumer.ftc.gov/articles/how-avoid-government-impersonator-scam"
+  },
+  {
+    "id": "irs-mail-first",
+    "text": "The IRS normally contacts you the first time by mail delivered by the U.S. Postal Service.",
+    "keywords": ["irs", "mail", "letter", "tax", "contact"],
+    "source": "https://www.irs.gov/help/how-to-know-its-the-irs"
+  },
+  {
+    "id": "irs-impersonator-threats",
+    "text": "IRS impersonators want you to pay \"now or else\" and threaten arrest or deportation.",
+    "keywords": ["irs", "tax", "arrest", "deportation", "deported", "pay now", "threat"],
+    "source": "https://www.irs.gov/help/tax-scams/recognize-tax-scams-and-fraud"
+  },
+  {
+    "id": "ice-no-phone-payment",
+    "text": "Homeland Security Investigations (part of ICE) will never call and demand payment over the phone to avoid an arrest.",
+    "keywords": ["ice", "hsi", "arrest", "jail", "phone", "call", "payment", "deportation"],
+    "source": "https://www.ice.gov/news/releases/hsi-michigan-and-ohio-warn-scammers-impersonating-special-agents"
+  },
+  {
+    "id": "ssa-payment-methods",
+    "text": "No legitimate government employee will ever ask for gift cards, gold bars, cryptocurrency, wire transfers, or cash.",
+    "keywords": ["social security", "ssa", "gift card", "gold", "cryptocurrency", "wire", "cash"],
+    "source": "https://oig.ssa.gov/scam-alerts/2026-04-28-new-wave-of-imposter-scams-criminals-using-real-ssa-employee-names-and-fake-badges/"
   }
 ]

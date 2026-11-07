@@ -14,7 +14,7 @@ Branch: `data`. Source: PRD section 9 (Role 4), in order.
 - [ ] 1. **Register the team on Devpost before 11 PM Sat.** Select tracks: NVIDIA, T-Mobile (sponsor), Best Design (HackUTD).
 - [x] 2. `data/official_contacts.json`: USCIS, IRS, ICE, FTC, SSA. Every phone number and URL copied from the agency's own .gov site, with the source URL. No numbers from memory or from AI.
   - [ ] Follow-up: SSA `phone` is still `null` — copy it by hand from https://www.ssa.gov/agency/contact/ (see official_contacts_sources.md)
-- [ ] 3. `data/guidance.json`: 15–20 short facts from official scam pages (USCIS scams page, FTC immigration scams, IRS impersonation page), each with a source URL.
+- [x] 3. `data/guidance.json`: 15–20 short facts from official scam pages (USCIS scams page, FTC immigration scams, IRS impersonation page), each with a source URL.
 - [ ] 4. `data/red_flags.json`: ~15 phrases per language (en, es, hi, zh). Have native speakers check es/hi/zh.
 - [ ] 5. `data/demo_messages.json`: 8 messages
   - [ ] 5 scams: USCIS/WhatsApp (Spanish), IRS gift card (English), fake lawyer/"notario" (Spanish), ICE threat (Hindi), lookalike link (Chinese)

@@ -1,18 +1,76 @@
 [
   {
     "agency": "USCIS",
-    "channels": ["mail", "myUSCIS account"],
-    "neverAsksFor": ["gift cards", "crypto", "wire transfer"],
-    "url": "https://www.uscis.gov/",
-    "phone": "TODO: copy verified number from uscis.gov",
-    "source": "https://www.uscis.gov/"
+    "channels": ["mail", "myUSCIS account", "email from a .gov address", "phone"],
+    "neverAsksFor": [
+      "gift cards",
+      "Western Union",
+      "MoneyGram",
+      "PayPal",
+      "Venmo",
+      "money transfer to an individual",
+      "payment by phone or email"
+    ],
+    "url": "https://www.uscis.gov/contactcenter",
+    "phone": "800-375-5283",
+    "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
   },
   {
     "agency": "IRS",
+    "channels": ["mail", "email (only if you opted in)", "text (only if you opted in)", "phone"],
+    "neverAsksFor": [
+      "gift cards",
+      "prepaid debit cards",
+      "wire transfer",
+      "cryptocurrency",
+      "payment app",
+      "immediate payment over the phone"
+    ],
+    "url": "https://www.irs.gov/help/telephone-assistance",
+    "phone": "800-829-1040",
+    "source": "https://www.irs.gov/help/how-to-know-its-the-irs"
+  },
+  {
+    "agency": "ICE",
+    "channels": [],
+    "neverAsksFor": [
+      "payment over the phone",
+      "bank account information",
+      "cash",
+      "money instead of jail time"
+    ],
+    "url": "https://www.ice.gov/contact",
+    "phone": "866-347-2423",
+    "source": "https://www.ice.gov/news/releases/hsi-michigan-and-ohio-warn-scammers-impersonating-special-agents"
+  },
+  {
+    "agency": "FTC",
+    "channels": [],
+    "neverAsksFor": [
+      "money",
+      "wire transfer",
+      "gift cards",
+      "cryptocurrency",
+      "payment app",
+      "cash or gold"
+    ],
+    "url": "https://reportfraud.ftc.gov",
+    "phone": "877-382-4357",
+    "source": "https://consumer.ftc.gov/articles/how-avoid-government-impersonator-scam"
+  },
+  {
+    "agency": "SSA",
     "channels": ["mail"],
-    "neverAsksFor": ["gift cards", "crypto", "wire transfer"],
-    "url": "https://www.irs.gov/",
-    "phone": "TODO: copy verified number from irs.gov",
-    "source": "https://www.irs.gov/"
+    "neverAsksFor": [
+      "gift cards",
+      "cash",
+      "wire transfer",
+      "cryptocurrency",
+      "prepaid debit cards",
+      "gold bars"
+    ],
+    "url": "https://oig.ssa.gov/report",
+    "phone": null,
+    "source": "https://oig.ssa.gov/scam-alerts/2026-04-28-new-wave-of-imposter-scams-criminals-using-real-ssa-employee-names-and-fake-badges/"
   }
 ]

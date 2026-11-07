@@ -25,7 +25,7 @@ Checked 2026-11-07. Everything below was read off the agency's own website, word
 - **Channels:** left empty. The FTC is where you report scams; it doesn't contact you about payments.
 
 ## SSA
-- **Phone: NOT FILLED IN (`null`).** ssa.gov blocks automated reading, and the SSA OIG pages don't list a phone number. **To do by hand:** open https://www.ssa.gov/agency/contact/ in a browser, copy the main toll-free number, and put it in the `phone` field.
+- **Phone 1-800-772-1213**: copied by hand by a teammate from https://www.ssa.gov/agency/contact/ (ssa.gov blocks automated reading, so it was checked in a browser).
 - **Never asks for:** "No legitimate government employee will ever … Ask for gift cards, gold bars, cryptocurrency, wire transfer, or cash." See https://oig.ssa.gov/scam-alerts/2026-04-28-new-wave-of-imposter-scams-criminals-using-real-ssa-employee-names-and-fake-badges/ (Apr 2026). Prepaid debit: SSA will never "require payment by retail gift card, cash, wire transfer, internet currency, or prepaid debit card". See https://oig.ssa.gov/scam-alerts/2025-07-17-new-twist-to-social-security-phone-scams/
 - **Channels:** "in most cases Social Security will mail you a letter" (same 2025 page)
 - **url:** "oig.ssa.gov/report" is the SSA OIG's scam-report address, quoted from the 2026 alert.

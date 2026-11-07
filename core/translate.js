@@ -20,6 +20,9 @@ const slow = new Set();         // languages still downloading: skip the wait, u
 
 const hasApi = () => typeof Translator !== "undefined";
 
+// Debug messages for developers only (right-click popup → Inspect → Console). Users never see these.
+const log = (...args) => console.info("[Kavach translate]", ...args);
+
 function timeout(ms) {
   return new Promise((resolve) => setTimeout(() => resolve(null), ms));
 }
@@ -30,9 +33,22 @@ function getTranslator(lang) {
     const pending = (async () => {
       const options = { sourceLanguage: "en", targetLanguage: lang };
       const availability = await Translator.availability(options);
+      log(`en → ${lang}: ${availability}`);
       if (availability === "unavailable") return null;
-      return Translator.create(options);
-    })().catch(() => null);
+      const translator = await Translator.create({
+        ...options,
+        monitor(m) {
+          m.addEventListener("downloadprogress", (e) =>
+            log(`downloading ${lang}: ${Math.round(e.loaded * 100)}%`)
+          );
+        }
+      });
+      log(`en → ${lang}: ready`);
+      return translator;
+    })().catch((err) => {
+      log(`en → ${lang}: could not start (${err?.name || err})`);
+      return null;
+    });
     translators.set(lang, pending);
     // When ready, stop skipping. If it failed, forget it so we can try again later.
     pending.then((t) => {
@@ -57,7 +73,11 @@ export async function prepareTranslation(targetLang) {
 
 export async function translate(text, targetLang = "en") {
   const source = String(text ?? "");
-  if (!source.trim() || targetLang === "en" || !SUPPORTED.includes(targetLang) || !hasApi()) {
+  if (!source.trim() || targetLang === "en" || !SUPPORTED.includes(targetLang)) {
+    return source;
+  }
+  if (!hasApi()) {
+    log("Translator API not available in this Chrome (needs Chrome 138+)");
     return source;
   }
   if (slow.has(targetLang)) return source; // still downloading — don't make the user wait again
@@ -71,6 +91,7 @@ export async function translate(text, targetLang = "en") {
         timeout(CREATE_TIMEOUT_MS).then(() => TIMED_OUT)
       ]);
       if (translator === TIMED_OUT) {
+        log(`${targetLang} not ready after 3s (still downloading) → showing English for now`);
         slow.add(targetLang);
         throw new Error("still downloading");
       }

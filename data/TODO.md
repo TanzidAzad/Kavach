@@ -30,7 +30,10 @@ Branch: `data`. Source: PRD section 9 (Role 4), in order.
   - [ ] Re-run `node eval/run_eval.js` after Role 2 merges the real Quick Check — current numbers are from the stub
   - [ ] Native speaker check: hi and zh test messages
   - [ ] (if time) Deep Check on a sample
-- [ ] 9. Devpost write-up, 5-slide deck (problem + stats → demo → how it works → accuracy → what's next), demo script.
+- [x] 9. Devpost write-up, 5-slide deck (problem + stats → demo → how it works → accuracy → what's next), demo script.
+  - Write-up: `demo/DEVPOST.md` · script: `demo/DEMO_SCRIPT.md` · deck: https://claude.ai/artifact/9FzNVzqnEEfuHeE4bg9yVk
+  - [ ] Fill the [brackets]: Nemotron model IDs (Role 3), accuracy numbers (after re-running eval), challenges/learned (team)
+  - [ ] Paste the write-up into Devpost and cut anything that does not work at feature freeze
 - [ ] 10. Record the ≤2-min demo video **by 10 AM Sun**.
 
 ## Milestones that need my work

@@ -22,7 +22,7 @@ Branch: `data`. Source: PRD section 9 (Role 4), in order.
   - [x] 1 suspicious
   - [x] 2 real/safe ones
   - [ ] Native speaker check: hi-ice-threat and zh-lookalike-link wording
-- [ ] 6. `demo/`: 2–3 realistic phone screenshots (WhatsApp/SMS style) of the demo scams. Made-up numbers/names only.
+- [x] 6. `demo/`: 2–3 realistic phone screenshots (WhatsApp/SMS style) of the demo scams. Made-up numbers/names only.
 - [ ] 7. `data/ui_strings.json`: every UI label in English (get the final list from Role 1).
 - [ ] 8. `eval/run_eval.js`: run Quick Check (and Deep Check on ~50 if time) on T-Mobile's synthetic set; write accuracy vs their baseline to `eval/results.md`. Be honest about what was measured.
 - [ ] 9. Devpost write-up, 5-slide deck (problem + stats → demo → how it works → accuracy → what's next), demo script.

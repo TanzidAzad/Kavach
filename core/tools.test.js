@@ -51,6 +51,7 @@ await expect("USCIS by mail", checkOfficialContact({ claimedAgency: "USCIS", cha
 await expect("email is not mail", checkOfficialContact({ claimedAgency: "IRS", channel: "email" }), "fail");
 await expect("no agency", checkOfficialContact({ channel: "WhatsApp" }), "unknown");
 await expect("unknown agency", checkOfficialContact({ claimedAgency: "NASA" }), "unknown");
+await expect("agency not in data + crypto", checkOfficialContact({ claimedAgency: "ICE", paymentMethod: "crypto" }), "fail");
 
 console.log("--- findRedFlags");
 await expect("english gift card", findRedFlags("Pay with a Gift Card today", "en"), "fail");

@@ -64,6 +64,10 @@ const CHANNEL_ALIASES = {
   "online account": "myuscis account"
 };
 
+// No U.S. government agency accepts these, so we can flag them even for agencies
+// that are not in official_contacts.json yet.
+const GENERIC_NEVER = ["gift cards", "crypto", "wire transfer"];
+
 const singular = (word) => normalize(word).replace(/s$/, "");
 
 function paymentMatches(paymentMethod, forbidden) {
@@ -81,6 +85,11 @@ export async function checkOfficialContact({ claimedAgency, channel, paymentMeth
     const contacts = await loadData("official_contacts.json");
     const entry = contacts.find((c) => normalize(c.agency) === normalize(claimedAgency));
     if (!entry) {
+      // We don't have this agency's details, but no U.S. agency takes these payments.
+      const generic = paymentMethod ? GENERIC_NEVER.find((item) => paymentMatches(paymentMethod, item)) : null;
+      if (generic) {
+        return result(TOOL, "fail", "Payment method", `Government agencies never ask for payment by ${generic}`);
+      }
       return result(TOOL, "unknown", "Official contact", `We have no official contact details for ${claimedAgency}`);
     }
 

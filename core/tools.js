@@ -142,10 +142,10 @@ export async function validateCaseNumber(caseNumber) {
     const cleaned = raw.toUpperCase().replace(/[\s-]/g, ""); // "EAC-12-345-67890" → "EAC1234567890"
     if (RECEIPT_RE.test(cleaned)) {
       return result(TOOL, "pass", LABEL,
-        "Format is correct (3 letters + 10 digits), but that alone does not prove it is real",
+        "The case number looks like a real USCIS format, but that alone does not prove it is real",
         "https://egov.uscis.gov/");
     }
-    return result(TOOL, "fail", LABEL, "Invalid format (needs 3 letters + 10 digits)", "https://egov.uscis.gov/");
+    return result(TOOL, "fail", LABEL, "The case number is not a real USCIS format", "https://egov.uscis.gov/");
   });
 }
 

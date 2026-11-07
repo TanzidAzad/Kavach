@@ -220,8 +220,26 @@ export async function runQuickCheck(text) {
     const failed = trace
       .filter((r) => r.status === "fail" && r.tool !== "search_guidance")
       .sort((a, b) => REASON_ORDER.indexOf(a.tool) - REASON_ORDER.indexOf(b.tool));
-    if (guidance.status === "fail") failed.push(guidance);
-    reasons = [...new Set(failed.map((r) => r.detail))].slice(0, 3);
+    // Candidate reasons, strongest first. For red flags, list each phrase's reason
+    // separately, so if the first one repeats another reason we can use the next one.
+    const candidates = [];
+    for (const r of failed) {
+      if (r.tool === "find_red_flags" && flags.length) candidates.push(...flags.map((f) => f.reason));
+      else candidates.push(r.detail);
+    }
+    if (guidance.status === "fail") candidates.push(guidance.detail);
+
+    // Don't mention the same payment type twice ("gift cards" in reason 1 and 3).
+    const paymentRe = d.paymentMethod ? PAYMENT_PATTERNS[d.paymentMethod] : null;
+    let paymentMentioned = false;
+    for (const reason of candidates) {
+      if (reasons.length === 3) break;
+      if (reasons.includes(reason)) continue;
+      const aboutPayment = paymentRe ? paymentRe.test(reason) : false;
+      if (aboutPayment && paymentMentioned) continue;
+      if (aboutPayment) paymentMentioned = true;
+      reasons.push(reason);
+    }
   }
 
   // Official contact: ONLY copied from data/official_contacts.json, never invented.

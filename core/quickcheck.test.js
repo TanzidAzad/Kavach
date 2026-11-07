@@ -65,6 +65,12 @@ check(scam.reasons.length <= 3 && scam.steps.length <= 3, "max 3 reasons and 3 s
 check(scam.mode === "quick", "mode is quick");
 check(scam.officialContact?.agency === "USCIS", "official contact comes from data file");
 check(scam.officialContact?.phone === null, "TODO phone number is hidden");
+for (const s of samples.slice(0, 4)) {
+  const v = await runQuickCheck(s.text);
+  const giftCardReasons = v.reasons.filter((r) => /gift card/i.test(r)).length;
+  check(giftCardReasons <= 1, `${s.name}: gift cards mentioned at most once (${giftCardReasons})`);
+}
+check(scam.reasons.includes("The case number is not a real USCIS format"), "case number reason is plain language");
 const safe = await runQuickCheck("hello");
 check(safe.verdict === "safe" && safe.confidence === "unsure", "safe is never 'high' confidence");
 

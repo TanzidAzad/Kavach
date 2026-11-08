@@ -40,20 +40,22 @@ async function safely(tool, label, body) {
 
 // ---------- checkOfficialContact ----------
 
-// Different words people use for the same thing → the word used in official_contacts.json.
-const PAYMENT_ALIASES = {
-  "gift card": "gift card",
-  "itunes card": "gift card",
-  "google play card": "gift card",
-  "amazon card": "gift card",
-  "tarjeta de regalo": "gift card",
-  "bitcoin": "crypto",
-  "cryptocurrency": "crypto",
-  "crypto": "crypto",
-  "wire transfer": "wire transfer",
-  "western union": "wire transfer",
-  "moneygram": "wire transfer"
+// Payment types grouped by kind, so "Zelle" matches "payment app" in the data,
+// and "Western Union" matches "wire transfer".
+const PAYMENT_KINDS = {
+  "gift card": ["gift card", "prepaid debit card", "itunes", "google play", "amazon card", "tarjeta de regalo"],
+  "crypto": ["crypto", "cryptocurrency", "bitcoin", "criptomoneda"],
+  "wire transfer": ["wire transfer", "western union", "moneygram", "money transfer", "transferencia"],
+  "payment app": ["payment app", "zelle", "venmo", "paypal", "cash app"]
 };
+
+function paymentKind(word) {
+  const w = singular(word);
+  for (const [kind, words] of Object.entries(PAYMENT_KINDS)) {
+    if (words.some((x) => w === x || w.includes(x))) return kind;
+  }
+  return null;
+}
 
 const CHANNEL_ALIASES = {
   "letter": "mail",
@@ -64,16 +66,20 @@ const CHANNEL_ALIASES = {
   "online account": "myuscis account"
 };
 
-// No U.S. government agency accepts these, so we can flag them even for agencies
-// that are not in official_contacts.json yet.
-const GENERIC_NEVER = ["gift cards", "crypto", "wire transfer"];
+// No U.S. government agency accepts these, so we flag them for every agency,
+// even if its entry in official_contacts.json doesn't list them.
+const GENERIC_NEVER = ["gift card", "crypto", "wire transfer", "payment app"];
 
-const singular = (word) => normalize(word).replace(/s$/, "");
+function singular(word) {
+  return normalize(word).replace(/s$/, "");
+}
 
 function paymentMatches(paymentMethod, forbidden) {
-  const pm = singular(PAYMENT_ALIASES[normalize(paymentMethod)] ?? paymentMethod);
+  const pm = singular(paymentMethod);
   const item = singular(forbidden);
-  return pm === item || pm.includes(item) || item.includes(pm);
+  if (pm === item || pm.includes(item) || item.includes(pm)) return true;
+  const kind = paymentKind(pm);
+  return kind !== null && kind === paymentKind(item);
 }
 
 export async function checkOfficialContact({ claimedAgency, channel, paymentMethod } = {}) {
@@ -84,23 +90,28 @@ export async function checkOfficialContact({ claimedAgency, channel, paymentMeth
     }
     const contacts = await loadData("official_contacts.json");
     const entry = contacts.find((c) => normalize(c.agency) === normalize(claimedAgency));
+    // Payment check: the agency's own list plus the ones no agency ever takes.
+    // The detail uses the caller's word ("Zelle"), which reads better than the data's ("payment app").
+    const forbidden = [...((entry && entry.neverAsksFor) || []), ...GENERIC_NEVER];
+    const badPayment = paymentMethod && forbidden.some((item) => paymentMatches(paymentMethod, item))
+      ? paymentMethod
+      : null;
+
     if (!entry) {
-      // We don't have this agency's details, but no U.S. agency takes these payments.
-      const generic = paymentMethod ? GENERIC_NEVER.find((item) => paymentMatches(paymentMethod, item)) : null;
-      if (generic) {
-        return result(TOOL, "fail", "Payment method", `Government agencies never ask for payment by ${generic}`);
+      if (badPayment) {
+        return result(TOOL, "fail", "Payment method", `Government agencies never ask for payment by ${badPayment}`);
       }
       return result(TOOL, "unknown", "Official contact", `We have no official contact details for ${claimedAgency}`);
     }
 
-    const badPayment = paymentMethod
-      ? (entry.neverAsksFor || []).find((item) => paymentMatches(paymentMethod, item))
-      : null;
-
     let badChannel = false;
     if (channel) {
       const ch = CHANNEL_ALIASES[normalize(channel)] ?? normalize(channel);
-      badChannel = !(entry.channels || []).some((c) => normalize(c) === ch);
+      // Data may say "email (only if you opted in)", so compare the first word(s) too.
+      badChannel = !(entry.channels || []).some((c) => {
+        const official = normalize(c);
+        return official === ch || official.startsWith(ch + " ");
+      });
     }
 
     const agency = entry.agency;
@@ -142,10 +153,10 @@ export async function validateCaseNumber(caseNumber) {
     const cleaned = raw.toUpperCase().replace(/[\s-]/g, ""); // "EAC-12-345-67890" → "EAC1234567890"
     if (RECEIPT_RE.test(cleaned)) {
       return result(TOOL, "pass", LABEL,
-        "Format is correct (3 letters + 10 digits), but that alone does not prove it is real",
+        "The case number looks like a real USCIS format, but that alone does not prove it is real",
         "https://egov.uscis.gov/");
     }
-    return result(TOOL, "fail", LABEL, "Invalid format (needs 3 letters + 10 digits)", "https://egov.uscis.gov/");
+    return result(TOOL, "fail", LABEL, "The case number is not a real USCIS format", "https://egov.uscis.gov/");
   });
 }
 

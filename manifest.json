@@ -29,7 +29,8 @@
     "sidePanel",
     "scripting",
     "activeTab",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
   "host_permissions": [
     "http://localhost:8787/*"

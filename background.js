@@ -109,6 +109,37 @@ async function readTab(tabId) {
   return res?.result || "";
 }
 
+// ---------- Ping when the page card appears ----------
+// Role 2's card sends { type: "KAVACH_CARD_SHOWN" }. The sound plays from a hidden offscreen page,
+// because web pages often block sound until the user clicks.
+
+const OFFSCREEN_URL = "sidepanel/offscreen.html";
+const PING_GAP_MS = 5000; // never ping twice within 5 s
+let lastPingAt = 0;
+let creatingOffscreen = null;
+
+async function ensureOffscreen() {
+  const url = chrome.runtime.getURL(OFFSCREEN_URL);
+  const existing = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"], documentUrls: [url] });
+  if (existing.length) return;
+  creatingOffscreen ??= chrome.offscreen
+    .createDocument({ url: OFFSCREEN_URL, reasons: ["AUDIO_PLAYBACK"], justification: "Soft ping when Kavach shows a warning card" })
+    .finally(() => { creatingOffscreen = null; });
+  await creatingOffscreen;
+}
+
+async function playPing() {
+  if (Date.now() - lastPingAt < PING_GAP_MS) return { played: false, skipped: true };
+  lastPingAt = Date.now();
+  try {
+    await ensureOffscreen();
+    return await chrome.runtime.sendMessage({ type: "KAVACH_PING", target: "offscreen" });
+  } catch (err) {
+    console.warn("[Kavach] ping failed", err?.message || err);
+    return { played: false };
+  }
+}
+
 // ---------- Messages ----------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -129,6 +160,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     );
     return true; // we answer later
+  }
+
+  if (msg?.type === "KAVACH_CARD_SHOWN") {
+    playPing().then(sendResponse);
+    return true;
   }
 
   if (msg?.type === "KAVACH_READ_TAB") {

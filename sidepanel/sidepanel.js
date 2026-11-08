@@ -44,20 +44,34 @@ function showStart(problemKey = null) {
   stopTalking();
   $("start-view").hidden = false;
   $("result-view").hidden = true;
+  $("family-form").hidden = true;
+  $("again").hidden = true;
   $("problem").hidden = !problemKey;
   if (problemKey) setText($("problem"), t(problemKey));
   setStatus("");
   $("message").focus();
 }
 
+// While checking, only the small "thinking" lines show.
 function showChecking(headingKey) {
   $("start-view").hidden = true;
   $("result-view").hidden = false;
-  for (const id of ["meter-block", "reasons-block", "steps-block", "help-block", "again", "family-form"]) $(id).hidden = true;
+  for (const id of ["meter-block", "answer", "details", "more", "again", "family-form"]) $(id).hidden = true;
+  $("thinking").hidden = false;
+  setText($("thinking-label"), t(headingKey));
   $("checklist").replaceChildren();
-  setText($("checklist-heading"), t(headingKey));
+  $("thinking-slot").append($("checklist"));
   setStatus("");
 }
+
+// "Show more" swaps the answer area for: why + what Kavach checked. The page itself never scrolls.
+function showDetails(open) {
+  $("details").hidden = !open;
+  $("answer").hidden = open;
+  $("more").setAttribute("aria-expanded", String(open));
+  $("more").replaceChildren(span(t(open ? "showLess" : "showMore")), open ? " ▴" : " ▾");
+}
+$("more").addEventListener("click", () => showDetails($("details").hidden));
 
 // ---------- Checklist (lines appear one by one, ~300 ms apart) ----------
 
@@ -80,7 +94,9 @@ function addLine(step) {
   const mark = document.createElement("span");
   mark.className = `mark ${step.status}`;
   mark.textContent = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "?";
-  li.append(mark, span(step.label || ""));
+  const label = span(step.label || "");
+  label.className = "label";
+  li.append(mark, label);
   if (step.detail) {
     const detail = span(step.detail);
     detail.className = "detail";
@@ -116,10 +132,7 @@ async function runCheck(input) {
   if (!v && text) {
     try { v = await runQuickCheck(text); } catch {}
   }
-  if (!v) {
-    setText($("checklist-heading"), "");
-    return showStart("errorGeneric");
-  }
+  if (!v) return showStart("errorGeneric");
 
   // Quick Check doesn't call onStep: show its trace as the checklist instead.
   await lineQueue;
@@ -149,6 +162,8 @@ function renderVerdict(v) {
   state.verdict = v;
   state.level = scamLevel(v);
 
+  $("thinking").hidden = true;
+  $("details-slot").append($("checklist")); // the checks now live under "Show more"
   $("meter-block").className = `lvl-${state.level}`;
   $("meter-block").hidden = false;
   setText($("level-label"), t(state.level));
@@ -157,14 +172,14 @@ function renderVerdict(v) {
   fillList($("reasons"), v.reasons);
   $("reasons-block").hidden = !(v.reasons || []).length;
   fillList($("steps"), v.steps);
-  $("steps-block").hidden = false;
   renderContact(v);
+  showDetails(false);
+  $("more").hidden = !(v.reasons || []).length && !$("checklist").children.length;
 
   const worried = state.level === "likely" || state.level === "highly_likely";
   $("help-block").hidden = !worried;
   if (worried) renderFamilyRow();
 
-  setText($("checklist-heading"), t("whatWeChecked"));
   $("again").hidden = false;
 }
 
@@ -210,7 +225,7 @@ async function speakableSummary(voice) {
 
 function setTalking(on) {
   state.speaking = on;
-  setText($("talk-label"), t(on ? "stopTalking" : "talkToKavach"));
+  setText($("talk-label"), t(on ? "stopTalking" : "cardTalk"));
 }
 
 async function talk() {
@@ -237,9 +252,10 @@ function stopTalking() {
   setTalking(false);
 }
 
+// The (i) next to "Speaks your language" shows the languages the voice speaks (native names).
 async function renderVoiceLanguages() {
   const { VOICE_LANGUAGES = [] } = await loadVoice();
-  const names = VOICE_LANGUAGES.map((l) => (typeof l === "string" ? l : l.name || l.label || l.code)).filter(Boolean);
+  const names = VOICE_LANGUAGES.map((l) => (typeof l === "string" ? l : l.native || l.name || l.code)).filter(Boolean);
   $("voice-langs").textContent = names.join(" · ");
 }
 
@@ -458,6 +474,38 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "KAVACH_READING") showChecking("readingPage");
 });
+
+// ---------- Floating panel mode (inside float.js's frame on the page) ----------
+
+const FLOAT = new URLSearchParams(location.search).has("float");
+
+// Compact styles for short windows. In the floating panel, use the page window's height (sent by float.js).
+function sizeClasses() {
+  const h = Number(new URLSearchParams(location.search).get("vh")) || innerHeight;
+  document.body.classList.toggle("short", h <= 760);
+  document.body.classList.toggle("tiny", h <= 620);
+  document.body.style.setProperty("--details-max", `${Math.max(240, h - 300)}px`); // "Show more" fits the window
+}
+sizeClasses();
+if (!FLOAT) addEventListener("resize", sizeClasses);
+function closeFloat() {
+  stopTalking();
+  window.parent.postMessage({ kavach: "close" }, "*"); // float.js checks it came from this frame
+}
+if (FLOAT) {
+  document.documentElement.classList.add("float");
+  document.body.classList.add("float");
+  $("close").hidden = false;
+  $("close").addEventListener("click", closeFloat);
+  // Tell float.js how tall the content is, so the frame fits it (no empty space, no scrolling).
+  const report = () => window.parent.postMessage({ kavach: "size", height: Math.ceil(document.body.scrollHeight) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("family-form").hidden) $("family-form").hidden = true; // Esc closes the sheet first
+    else closeFloat();
+  });
+}
 
 // ---------- Start ----------
 

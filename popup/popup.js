@@ -1,6 +1,6 @@
 // popup/popup.js — Role 1 (UI). Toolbar popup = launcher only.
-// Each button saves a check and opens the side panel, where the answer is shown.
-// The side panel must be opened right inside the click (Chrome rule), so we never await before it.
+// Each button saves a check and shows Kavach as a floating panel over the page.
+// On pages Kavach can't draw on (chrome://, Web Store…) it opens Chrome's side panel instead.
 
 import { initI18n, t, setText, repaintAll, savedLang, LANGS } from "../sidepanel/i18n.js";
 import { prepareTranslation } from "../core/translate.js";
@@ -10,8 +10,7 @@ const lang = () => $("lang").value;
 let tab = null;            // the tab the user is looking at
 let imageDataUrl = null;   // chosen screenshot
 
-function openPanel() {
-  // Sync call inside the click. Prefer the tab; fall back to the window.
+function openSidePanel() {
   try {
     return chrome.sidePanel.open(tab?.id != null ? { tabId: tab.id } : { windowId: tab?.windowId });
   } catch (err) {
@@ -19,29 +18,25 @@ function openPanel() {
   }
 }
 
-function sendCheck(check) {
-  return chrome.runtime.sendMessage({ type: "KAVACH_CHECK", panelOpened: true, tabId: tab?.id, url: tab?.url || "", ...check });
+// Ask background.js to show the floating panel; if it can't, use the side panel (still inside the click's time).
+async function show(message) {
+  try {
+    const res = await chrome.runtime.sendMessage({ tabId: tab?.id, url: tab?.url || "", mode: "check", ...message });
+    if (!res?.floated) await openSidePanel();
+    setTimeout(() => window.close(), 100);
+  } catch {
+    setText($("status"), t("errorGeneric"));
+  }
 }
 
-const done = () => setTimeout(() => window.close(), 150);
-const failed = () => setText($("status"), t("errorGeneric"));
-
-// Big button: read this page (background.js does the reading, so it survives the popup closing).
-$("check-page").addEventListener("click", () => {
-  const opening = openPanel();
-  chrome.runtime
-    .sendMessage({ type: "KAVACH_READ_TAB", tabId: tab?.id, url: tab?.url || "", mode: "check" })
-    .catch(() => {});
-  opening.then(done, failed);
-});
+// Big button: read this page (background.js reads it, so it works even after the popup closes).
+$("check-page").addEventListener("click", () => show({ type: "KAVACH_READ_TAB" }));
 
 // Pasted text and/or a screenshot.
 $("check-message").addEventListener("click", () => {
   const text = $("message").value.trim();
   if (!text && !imageDataUrl) return setText($("status"), t("emptyInput"));
-  const opening = openPanel();
-  sendCheck({ text, imageDataUrl, mode: "check", url: "" }).catch(() => {});
-  opening.then(done, failed);
+  show({ type: "KAVACH_CHECK", text, imageDataUrl, url: "" });
 });
 
 function updateCheckButton() {

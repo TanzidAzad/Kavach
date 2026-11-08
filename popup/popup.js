@@ -1,420 +1,55 @@
-// popup/popup.js — Role 1 (UI)
-// The one-screen popup (PRD section 5). Talks to the engine only through PRD 8.4:
-//   runQuickCheck(text) and runDeepCheck({ text, imageDataUrl }, onStep).
-//
-// Translation: every piece of text on screen is stored in English in a `data-en`
-// attribute and drawn through translate() for the chosen language. Changing the
-// language just redraws everything. Web links are kept out of translation so the
-// translator can never change them.
+// popup/popup.js — Role 1 (UI). Toolbar popup = launcher only.
+// Each button saves a check and opens the side panel, where the answer is shown.
+// The side panel must be opened right inside the click (Chrome rule), so we never await before it.
 
-import { runQuickCheck } from "../core/quickcheck.js";
-import { runDeepCheck } from "../agent/agent.js";
-import { translate, prepareTranslation } from "../core/translate.js";
-import { loadData } from "../core/data.js";
+import { initI18n, t, setText, repaintAll, savedLang, LANGS } from "../sidepanel/i18n.js";
+import { prepareTranslation } from "../core/translate.js";
 
 const $ = (id) => document.getElementById(id);
-const LANGS = ["en", "es", "hi", "zh"];
-
-// English labels. data/ui_strings.json (Role 4) overrides these when it loads.
-const DEFAULT_STRINGS = {
-  appName: "Kavach",
-  pasteMessage: "Paste a message…",
-  uploadScreenshot: "Upload screenshot",
-  screenshotAdded: "Screenshot added",
-  screenshotNote: "Screenshots are sent as an image so the text can be read.",
-  check: "Check",
-  checking: "Checking…",
-  checks: "Checks:",
-  downloadingLanguage: "Downloading {lang}… (first time only)",
-  emptyInput: "Paste a message or upload a screenshot first.",
-  newCheck: "← New check",
-  scam: "SCAM",
-  suspicious: "SUSPICIOUS",
-  safe: "LOOKS SAFE",
-  confidence: "Confidence",
-  high: "High",
-  medium: "Medium",
-  unsure: "Unsure",
-  why: "Why:",
-  whatToDo: "What to do:",
-  officialContact: "Official contact:",
-  call: "Call",
-  website: "Website",
-  reportToFtc: "Report it to the FTC",
-  askFamily: "Ask family",
-  copied: "Copied ✓",
-  copyFailed: "Could not copy.",
-  deepCheck: "Deep check →",
-  offline: "offline",
-  deepCheckNeedsInternet: "Deep check needs internet",
-  errorGeneric: "Something went wrong. Please try again."
-};
-let strings = { ...DEFAULT_STRINGS };
-const t = (key) => strings[key] ?? DEFAULT_STRINGS[key] ?? key;
-
-// Optional per-language labels in data/ui_strings.json, e.g. { "check": "Check", …, "es": { "check": "Revisar", … } }.
-// A label found there is used as-is; anything missing falls back to machine translation.
-const LANG_NAMES = { es: "Spanish", hi: "Hindi", zh: "Chinese" };
-function handLabel(english, L) {
-  const own = strings[L];
-  if (L === "en" || !own || typeof own !== "object") return null;
-  if (english.endsWith(" ○")) {
-    const inner = handLabel(english.slice(0, -2), L);
-    return inner && `${inner} ○`;
-  }
-  const key = Object.keys(DEFAULT_STRINGS).find((k) => t(k) === english);
-  return (key && typeof own[key] === "string" && own[key]) || null;
-}
-const tr = (text, L) => handLabel(text, L) ?? translate(text, L);
-
-const state = {
-  verdict: null,      // last Verdict shown
-  busy: false,        // a check is running
-  run: 0,             // id of the latest check; older results are ignored
-  imageDataUrl: null, // chosen screenshot
-  statusTimer: null
-};
-let contacts = []; // data/official_contacts.json
-
 const lang = () => $("lang").value;
+let tab = null;            // the tab the user is looking at
+let imageDataUrl = null;   // chosen screenshot
 
-// ---------- Translation + drawing ----------
-
-// Official links only: https and a .gov address. Anything else stays plain text.
-const URL_RE = /(https?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]])/g;
-function officialUrl(raw) {
+function openPanel() {
+  // Sync call inside the click. Prefer the tab; fall back to the window.
   try {
-    const u = new URL(raw);
-    if (u.protocol === "https:" && /(^|\.)[a-z0-9-]+\.gov$/i.test(u.hostname)) return u;
-  } catch {}
-  return null;
-}
-
-function makeLink(url, labelNode) {
-  const a = document.createElement("a");
-  a.href = url.href;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.append(labelNode ?? (url.hostname.replace(/^www\./, "") + url.pathname.replace(/\/$/, "")));
-  return a;
-}
-
-// Translates text but keeps web links untouched. Returns DOM nodes.
-async function translateToNodes(english, L) {
-  const parts = String(english ?? "").split(URL_RE); // odd indexes are links
-  const done = await Promise.all(parts.map((p, i) => (i % 2 ? p : tr(p.trim(), L))));
-  const nodes = [];
-  done.forEach((part, i) => {
-    if (i % 2) {
-      const url = officialUrl(part);
-      if (nodes.length) nodes.push(" ");
-      nodes.push(url ? makeLink(url) : part);
-    } else if (part) {
-      const needsSpace = nodes.length && !/^[.,;:!?。，、！？]/.test(part);
-      nodes.push(needsSpace ? " " + part : part);
-    }
-  });
-  return nodes;
-}
-
-// Draws one element in the current language (skipped if something newer was drawn meanwhile).
-async function paint(el) {
-  const english = el.dataset.en ?? "";
-  const L = lang();
-  const nodes = await translateToNodes(english, L);
-  if (el.dataset.en !== english || lang() !== L) return;
-  el.replaceChildren(...nodes);
-}
-
-function setText(el, english) {
-  el.dataset.en = english ?? "";
-  return paint(el);
-}
-
-async function paintPlaceholder() {
-  const L = lang();
-  const text = await tr(t("pasteMessage"), L);
-  if (lang() === L) $("message").placeholder = text;
-}
-
-function repaintAll() {
-  paintPlaceholder();
-  return Promise.all([...document.querySelectorAll("[data-en]")].map(paint));
-}
-
-const span = (english) => {
-  const s = document.createElement("span");
-  setText(s, english);
-  return s;
-};
-
-// ---------- Status line (bottom right) ----------
-
-const baseStatus = () => (navigator.onLine ? "" : `${t("offline")} ○`);
-
-// Shown while Chrome downloads a language the first time. The translator isn't ready yet,
-// so the text comes from ui_strings.json (that language) or stays English.
-let langTimer = null;
-function waitForLanguage(L) {
-  clearTimeout(langTimer);
-  const own = strings[L]?.downloadingLanguage;
-  const nativeName = $("lang").selectedOptions[0]?.textContent || L;
-  const message = own ? own.replace("{lang}", nativeName) : t("downloadingLanguage").replace("{lang}", LANG_NAMES[L] || L);
-  clearTimeout(state.statusTimer);
-  delete $("status").dataset.en; // already final text: don't run it through the translator
-  $("status").textContent = message;
-  const started = Date.now();
-  const poll = async () => {
-    if (lang() !== L) return;
-    const status = await prepareTranslation(L).catch(() => "unavailable");
-    if (lang() !== L) return;
-    if (status === "downloading" && Date.now() - started < 10 * 60 * 1000) {
-      langTimer = setTimeout(poll, 3000);
-      return;
-    }
-    setStatus(baseStatus());
-    repaintAll();
-  };
-  langTimer = setTimeout(poll, 3000);
-}
-
-function setStatus(english, { flash = false } = {}) {
-  clearTimeout(state.statusTimer);
-  setText($("status"), english);
-  if (flash) state.statusTimer = setTimeout(() => setText($("status"), baseStatus()), 2000);
-}
-
-// ---------- Views ----------
-
-function updateButtons() {
-  const v = state.verdict;
-  $("ask-family").hidden = !v;
-  $("deep-check").hidden = !navigator.onLine || !v || v.mode === "deep";
-  for (const id of ["check", "deep-check", "ask-family"]) $(id).disabled = state.busy;
-}
-
-function showInputView() {
-  $("input-view").hidden = false;
-  $("result-view").hidden = true;
-  $("new-check").hidden = true;
-}
-
-function showResultView() {
-  $("input-view").hidden = true;
-  $("result-view").hidden = false;
-  $("new-check").hidden = false;
-}
-
-function fillList(listEl, items) {
-  listEl.replaceChildren();
-  for (const item of (items || []).slice(0, 3)) {
-    const li = document.createElement("li");
-    setText(li, item);
-    listEl.append(li);
+    return chrome.sidePanel.open(tab?.id != null ? { tabId: tab.id } : { windowId: tab?.windowId });
+  } catch (err) {
+    return Promise.reject(err);
   }
 }
 
-function renderVerdict(v) {
-  state.verdict = v;
-  showResultView();
-
-  const line = $("verdict-line");
-  line.hidden = false;
-  line.className = `verdict ${v.verdict}`;
-  setText($("verdict-label"), t(v.verdict));
-  setText($("conf-label"), t("confidence"));
-  setText($("conf-value"), t(v.confidence));
-
-  // After a Deep Check, keep the checklist so people can see what the agent checked.
-  // It shrinks to one row of labels (details are already in the reasons) so the popup doesn't scroll.
-  const keepChecklist = v.mode === "deep" && $("checklist").children.length > 0;
-  $("checklist-block").hidden = !keepChecklist;
-  $("checklist").classList.toggle("compact", keepChecklist);
-  if (keepChecklist) setText($("checklist-heading"), t("checks"));
-  $("reasons-block").hidden = false;
-  fillList($("reasons"), v.reasons);
-
-  $("steps-block").hidden = false;
-  fillList($("steps"), v.steps);
-  renderContact(v);
-  updateButtons();
+function sendCheck(check) {
+  return chrome.runtime.sendMessage({ type: "KAVACH_CHECK", panelOpened: true, tabId: tab?.id, url: tab?.url || "", ...check });
 }
 
-// Official contact line. Values come ONLY from data/official_contacts.json.
-function renderContact(v) {
-  const el = $("contact");
-  el.replaceChildren();
+const done = () => setTimeout(() => window.close(), 150);
+const failed = () => setText($("status"), t("errorGeneric"));
 
-  const agency = v.officialContact?.agency;
-  const entry = contacts.find((c) => c.agency === agency) || (contacts.length ? null : v.officialContact);
-  const url = entry?.url && officialUrl(entry.url);
-  const phone = typeof entry?.phone === "string" && /^[\d\s().+-]{7,}$/.test(entry.phone) ? entry.phone.trim() : null;
-
-  if (entry && (url || phone)) {
-    const row = document.createElement("span");
-    row.append(span(t("officialContact")), ` ${entry.agency}`);
-    if (phone) {
-      const a = document.createElement("a");
-      a.href = `tel:${phone.replace(/[^\d+]/g, "")}`;
-      a.append(span(t("call")), ` ${phone}`);
-      row.append(" · ", a);
-    }
-    if (url) row.append(" · ", makeLink(url, span(t("website"))));
-    el.append(row);
-  }
-
-  // FTC report link for anything that isn't "looks safe".
-  const ftc = contacts.find((c) => c.agency === "FTC");
-  const ftcUrl = ftc && officialUrl(ftc.url);
-  if (v.verdict !== "safe" && ftcUrl && agency !== "FTC") {
-    if (el.childNodes.length) el.append(document.createElement("br"));
-    el.append(makeLink(ftcUrl, span(t("reportToFtc"))));
-  }
-
-  el.hidden = !el.childNodes.length;
-}
-
-// Checklist lines are queued so each one appears ~300ms after the previous one,
-// even when several checks finish at the same moment (the agent runs some in parallel).
-const LINE_GAP_MS = 300;
-let lineQueue = Promise.resolve();
-let lastLineAt = 0;
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function queueChecklistLine(step, run) {
-  lineQueue = lineQueue.then(async () => {
-    if (run !== state.run) return;
-    await wait(Math.max(0, lastLineAt + LINE_GAP_MS - Date.now()));
-    if (run !== state.run) return;
-    addChecklistLine(step);
-    lastLineAt = Date.now();
-  });
-  return lineQueue;
-}
-
-function addChecklistLine(step) {
-  // The line is added right away (keeps the order); its text is translated after.
-  const li = document.createElement("li");
-  const mark = document.createElement("span");
-  mark.className = `mark ${step.status}`;
-  mark.textContent = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "…";
-  const sep = document.createElement("span");
-  sep.className = "sep";
-  sep.textContent = " — ";
-  const detail = span(step.detail);
-  detail.className = "detail";
-  li.title = step.detail || ""; // in the compact view, hover shows the detail
-  li.append(mark, span(step.label), sep, detail);
-  $("checklist").append(li);
-}
-
-// ---------- Checks ----------
-
-function setBusy(busy) {
-  state.busy = busy;
-  setText($("check"), t(busy ? "checking" : "check"));
-  updateButtons();
-}
-
-async function startQuickCheck(text) {
-  const run = ++state.run;
-  setBusy(true);
-  try {
-    const v = await runQuickCheck(text);
-    if (run !== state.run) return;
-    renderVerdict(v);
-    setStatus(baseStatus());
-  } catch {
-    if (run === state.run) setStatus(t("errorGeneric"));
-  } finally {
-    if (run === state.run) setBusy(false);
-  }
-}
-
-async function startDeepCheck() {
-  const text = $("message").value.trim();
-  const imageDataUrl = state.imageDataUrl;
-  if (!text && !imageDataUrl) return setStatus(t("emptyInput"));
-
-  if (!navigator.onLine) {
-    // No internet: show the offline Quick Check if there is text, and say why.
-    if (text) await startQuickCheck(text);
-    return setStatus(t("deepCheckNeedsInternet"));
-  }
-
-  const run = ++state.run;
-  const previous = state.verdict;
-  setBusy(true);
-  showResultView();
-  setStatus(baseStatus());
-
-  // The reasons area is replaced by the live checklist (PRD section 5).
-  $("verdict-line").hidden = !previous;
-  $("steps-block").hidden = !previous;
-  $("reasons-block").hidden = true;
-  $("checklist-block").hidden = false;
-  setText($("checklist-heading"), t("checking"));
-  $("checklist").classList.remove("compact");
-  $("checklist").replaceChildren();
-
-  try {
-    lineQueue = Promise.resolve();
-    lastLineAt = 0;
-    const v = await runDeepCheck({ text, imageDataUrl }, (step) => {
-      if (run === state.run && step) queueChecklistLine(step, run);
-    });
-    // Let every line appear, and the last one be seen, before showing the verdict.
-    await lineQueue;
-    await wait(LINE_GAP_MS);
-    if (run !== state.run) return;
-    renderVerdict(v);
-    // The engine falls back to Quick Check when the server can't be reached.
-    if (v.mode !== "deep") setStatus(t("deepCheckNeedsInternet"));
-  } catch {
-    if (run !== state.run) return;
-    if (previous) renderVerdict(previous);
-    else showInputView();
-    setStatus(t("errorGeneric"));
-  } finally {
-    if (run === state.run) setBusy(false);
-  }
-}
-
-$("check").addEventListener("click", () => {
-  const text = $("message").value.trim();
-  if (state.imageDataUrl) return startDeepCheck();
-  if (!text) return setStatus(t("emptyInput"));
-  startQuickCheck(text);
+// Big button: read this page (background.js does the reading, so it survives the popup closing).
+$("check-page").addEventListener("click", () => {
+  const opening = openPanel();
+  chrome.runtime
+    .sendMessage({ type: "KAVACH_READ_TAB", tabId: tab?.id, url: tab?.url || "", mode: "check" })
+    .catch(() => {});
+  opening.then(done, failed);
 });
 
+// Pasted text and/or a screenshot.
+$("check-message").addEventListener("click", () => {
+  const text = $("message").value.trim();
+  if (!text && !imageDataUrl) return setText($("status"), t("emptyInput"));
+  const opening = openPanel();
+  sendCheck({ text, imageDataUrl, mode: "check", url: "" }).catch(() => {});
+  opening.then(done, failed);
+});
+
+function updateCheckButton() {
+  $("check-message").hidden = !$("message").value.trim() && !imageDataUrl;
+}
+$("message").addEventListener("input", updateCheckButton);
 $("message").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !state.busy) $("check").click();
-});
-
-$("deep-check").addEventListener("click", () => startDeepCheck());
-
-$("new-check").addEventListener("click", () => {
-  state.run++; // ignore any check still running
-  state.verdict = null;
-  $("message").value = "";
-  clearScreenshot();
-  setBusy(false);
-  showInputView();
-  setStatus(baseStatus());
-  $("message").focus();
-});
-
-// ---------- Ask family ----------
-
-$("ask-family").addEventListener("click", async () => {
-  if (!state.verdict) return;
-  try {
-    const message = await translate(state.verdict.familyMessage, lang());
-    await navigator.clipboard.writeText(message);
-    setStatus(t("copied"), { flash: true });
-  } catch {
-    setStatus(t("copyFailed"), { flash: true });
-  }
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("check-message").click();
 });
 
 // ---------- Screenshot ----------
@@ -423,28 +58,23 @@ function setScreenshot(file) {
   if (!file || !file.type.startsWith("image/")) return;
   const reader = new FileReader();
   reader.onload = () => {
-    state.imageDataUrl = reader.result;
+    imageDataUrl = reader.result;
     $("upload-label").hidden = true;
     $("file-info").hidden = false;
-    $("file-info").title = file.name || "";
     $("image-note").hidden = false;
-    setStatus(baseStatus());
+    updateCheckButton();
   };
   reader.readAsDataURL(file);
 }
-
-function clearScreenshot() {
-  state.imageDataUrl = null;
+$("screenshot").addEventListener("change", (e) => setScreenshot(e.target.files?.[0]));
+$("remove-file").addEventListener("click", () => {
+  imageDataUrl = null;
   $("screenshot").value = "";
   $("upload-label").hidden = false;
   $("file-info").hidden = true;
   $("image-note").hidden = true;
-}
-
-$("screenshot").addEventListener("change", (e) => setScreenshot(e.target.files && e.target.files[0]));
-$("remove-file").addEventListener("click", clearScreenshot);
-
-// Pasting an image (e.g. Cmd+V after a screenshot) works like uploading it.
+  updateCheckButton();
+});
 $("message").addEventListener("paste", (e) => {
   const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
   if (item) {
@@ -457,51 +87,22 @@ $("message").addEventListener("paste", (e) => {
 
 $("lang").addEventListener("change", () => {
   const L = lang();
-  // Must start right after the user's selection — Chrome only allows the download then.
-  prepareTranslation(L)
-    .then((status) => {
-      // While the language downloads, the popup shows English; redraw a few times so it switches when ready.
-      if (status === "downloading") waitForLanguage(L);
-    })
-    .catch(() => {});
-  try {
-    chrome.storage.local.set({ lang: L });
-  } catch {}
+  prepareTranslation(L).catch(() => {}); // starts the download; must be right after the choice
+  try { chrome.storage.local.set({ lang: L }); } catch {}
   document.documentElement.lang = L;
   repaintAll();
 });
 
-// ---------- Online / offline ----------
-
-function updateOnline() {
-  updateButtons();
-  setStatus(baseStatus());
-}
-window.addEventListener("online", updateOnline);
-window.addEventListener("offline", updateOnline);
-
 // ---------- Start ----------
 
 async function init() {
-  let saved = "en";
+  const L = await savedLang();
+  $("lang").value = LANGS.includes(L) ? L : "en";
+  document.documentElement.lang = lang();
+  await initI18n(lang);
   try {
-    const r = await chrome.storage.local.get("lang");
-    if (LANGS.includes(r.lang)) saved = r.lang;
+    [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   } catch {}
-  $("lang").value = saved;
-  document.documentElement.lang = saved;
-
-  try {
-    strings = { ...DEFAULT_STRINGS, ...(await loadData("ui_strings.json")) };
-  } catch {}
-  try {
-    contacts = await loadData("official_contacts.json");
-  } catch {}
-
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
-    el.dataset.en = t(el.dataset.i18n);
-  });
-  updateOnline();
   repaintAll();
 }
 

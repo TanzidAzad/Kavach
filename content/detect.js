@@ -257,12 +257,60 @@
     }
   }
 
+  // ---------- reportfraud.ftc.gov: fill in the "what happened" box ----------
+
+  // The side panel's "Report to FTC" button saves the report text as chrome.storage.local "ftcDraft"
+  // ({ text, at }) and opens reportfraud.ftc.gov. The FTC form has several steps; when its
+  // "what happened" box (textarea formControlName="comments") appears, we type the report in ONCE,
+  // only if the box is empty, and delete the draft. We never press Continue / Submit — the user does.
+  const FTC_DRAFT_MAX_AGE_MS = 30 * 60 * 1000;
+  const FTC_MAX_CHARS = 3500; // the box's own maxlength
+
+  async function fillFtcReport() {
+    let draft;
+    try {
+      draft = (await chrome.storage.local.get("ftcDraft")).ftcDraft;
+    } catch {
+      return;
+    }
+    if (!draft?.text) return;
+    if (Date.now() - (draft.at || 0) > FTC_DRAFT_MAX_AGE_MS) {
+      chrome.storage.local.remove("ftcDraft").catch(() => {});
+      return;
+    }
+
+    const tryFill = () => {
+      const box = document.querySelector('textarea[formcontrolname="comments"], textarea[aria-labelledby="commentsLabel"]');
+      if (!box) return false;
+      if (!box.value.trim()) {
+        box.value = draft.text.slice(0, FTC_MAX_CHARS);
+        box.dispatchEvent(new Event("input", { bubbles: true })); // Angular reads the value on "input"
+        box.dispatchEvent(new Event("change", { bubbles: true }));
+        box.scrollIntoView({ block: "center", behavior: "smooth" });
+        log("FTC report filled in — waiting for the user to submit");
+      }
+      chrome.storage.local.remove("ftcDraft").catch(() => {});
+      return true;
+    };
+
+    if (tryFill()) return;
+    const observer = new MutationObserver(() => tryFill() && stop());
+    const timer = setTimeout(() => stop(), FTC_DRAFT_MAX_AGE_MS);
+    const stop = () => {
+      observer.disconnect();
+      clearTimeout(timer);
+    };
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   // ---------- start ----------
 
   if (SITE) {
     new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener("hashchange", schedule); // Gmail changes #inbox/… when you open an email
     schedule();
+  } else if (host === "reportfraud.ftc.gov") {
+    fillFtcReport();
   } else {
     checkThisSite();
   }

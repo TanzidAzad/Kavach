@@ -447,7 +447,10 @@ function ftcSummary() {
 
 $("ftc").addEventListener("click", async () => {
   if (!state.verdict) return;
-  try { await navigator.clipboard.writeText(ftcSummary()); } catch {}
+  const report = ftcSummary();
+  try { await navigator.clipboard.writeText(report); } catch {}
+  // content/detect.js types this into the FTC form's "what happened" box (never submits it).
+  try { await chrome.storage.local.set({ ftcDraft: { text: report, at: Date.now() } }); } catch {}
   setStatus(t("copiedPasteForm"), { flash: true });
   const ftc = contacts.find((c) => c.agency === "FTC");
   const url = ftc && officialUrl(ftc.url);

@@ -15,7 +15,9 @@
   <p>Server must be running: <code>cd server &amp;&amp; npm start</code></p>
   <select id="sample"></select>
   <textarea id="text"></textarea>
-  <p><button id="deep">Run Deep Check</button> <button id="quick">Run Quick Check</button> <span id="status"></span></p>
+  <p>Upload screenshot: <input type="file" id="image" accept="image/*"> <button id="clearimg">Clear image</button>
+    <span id="imginfo"></span> <small>(make test images with <a href="make_screenshot.html">make_screenshot.html</a>)</small></p>
+  <p><button id="deep">Run Deep Check</button> <button id="quick">Run Quick Check</button> <button id="dlrec">Download recording</button> <span id="status"></span></p>
   <div id="steps"></div>
   <pre id="out"></pre>
   <script type="module" src="dev.js"></script>

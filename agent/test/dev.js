@@ -11,6 +11,23 @@ for (const m of TEST_MESSAGES) $("sample").add(new Option(`${m.id} (expect ${m.e
 $("text").value = TEST_MESSAGES[0].text;
 $("sample").onchange = () => ($("text").value = $("sample").value);
 
+let imageDataUrl = null;
+$("image").onchange = () => {
+  const file = $("image").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    imageDataUrl = reader.result;
+    $("imginfo").textContent = `${file.name} (${Math.round(file.size / 1024)} KB) — Deep Check will read it`;
+  };
+  reader.readAsDataURL(file);
+};
+$("clearimg").onclick = () => {
+  imageDataUrl = null;
+  $("image").value = "";
+  $("imginfo").textContent = "";
+};
+
 async function run(kind) {
   $("steps").textContent = "";
   $("out").textContent = "";
@@ -22,7 +39,7 @@ async function run(kind) {
     $("steps").append(line);
   };
   const text = $("text").value;
-  const v = kind === "deep" ? await runDeepCheck({ text }, onStep) : await runQuickCheck(text);
+  const v = kind === "deep" ? await runDeepCheck({ text, imageDataUrl }, onStep) : await runQuickCheck(text);
   const ms = Math.round(performance.now() - t0);
   $("status").textContent = `${v.mode} · ${v.verdict}/${v.confidence} · ${v.trace.length} steps · ${ms}ms` +
     (kind === "deep" && v.mode === "quick" ? " (fell back — is the server running?)" : "");

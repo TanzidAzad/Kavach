@@ -2,15 +2,15 @@
 // Contract: PRD 8.4 — runDeepCheck({ text, imageDataUrl }, onStep) → Promise<Verdict>
 // onStep(toolResult) is called each time a tool finishes, so the popup can add a checklist line.
 //
-// Flow: mask(text) → Nemotron tool loop through our server → run tools locally with the
-// REAL values (unmasked here, never sent) → submit_verdict → rules enforced in code.
-// Any error, timeout, or offline → runQuickCheck(text) (mode "quick"). Never throws.
+// Flow: [screenshot → vision model → text] → mask(text) → Nemotron tool loop through our server →
+// run tools locally with the REAL values (unmasked here, never sent) → submit_verdict → rules in code.
+// Server down/offline → runQuickCheck(text) (mode "quick"). Model slow → finish locally from the checks that ran. Never throws.
 
 import { mask, unmaskArgs } from "../core/mask.js";
 import { loadData } from "../core/data.js";
 import { runQuickCheck } from "../core/quickcheck.js";
 import { getToolSchemas, TOOL_RUNNERS, PAYMENTS } from "./toolSchemas.js";
-import { SYSTEM_PROMPT, NUDGE_TOOLS, NUDGE_VERDICT, userMessage } from "./prompts.js";
+import { SYSTEM_PROMPT, NUDGE_TOOLS, NUDGE_VERDICT, VISION_PROMPT, userMessage } from "./prompts.js";
 import { cleanText, cleanList, pickFamilyMessage, URL_RE } from "./sanitize.js";
 
 export { cleanText };
@@ -22,6 +22,10 @@ export const CONFIG = {
   visionModel: "vision",
   maxTurns: 6,
   maxInputChars: 4000, // longer messages are cut (keeps the model fast; scams are short)
+  visionTimeoutMs: 8000, // screenshot reading gets its own budget inside the 15s
+  visionMaxTokens: 1500,
+  imageMaxSide: 1280, // screenshots are downscaled in the browser before sending
+  imageQuality: 0.85,
   totalTimeoutMs: 15000,
   perCallTimeoutMs: 6000, // with thinking off a turn is ~0.3–1s; a slow call gets one retry
   maxTokens: 2048, // Nemotron thinks first; thinking counts against max_tokens
@@ -292,22 +296,109 @@ async function finishLocally(run, onStep) {
   return buildVerdict({ verdict, confidence: "medium", reasons: [], steps: [], officialAgency: agency, familyMessage: "" }, trace, ctx);
 }
 
+// ---------- screenshot ----------
+
+// Browser only: shrink to ≤1280px on the longest side, JPEG 0.85 (smaller upload, faster model).
+// In Node (tests) there is no canvas, so the image is sent as is.
+async function downscale(dataUrl) {
+  if (typeof OffscreenCanvas === "undefined" || typeof createImageBitmap === "undefined") return dataUrl;
+  try {
+    const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
+    const scale = Math.min(1, CONFIG.imageMaxSide / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#fff"; // JPEG has no transparency
+    g.fillRect(0, 0, w, h);
+    g.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: CONFIG.imageQuality });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return "data:image/jpeg;base64," + btoa(bin);
+  } catch {
+    return dataUrl;
+  }
+}
+
+// Sends the image (NOT masked — it's pixels; the popup says screenshots are sent as images, PRD 13.5)
+// to the vision model and returns the text it reads. Never throws: "" if it failed.
+async function readScreenshot(imageDataUrl, deadline) {
+  if (!/^data:image\/[a-z+.-]+;base64,/i.test(String(imageDataUrl))) return "";
+  try {
+    const url = await downscale(imageDataUrl);
+    const left = Math.min(CONFIG.visionTimeoutMs, remainingMs(deadline) - 3000);
+    if (left < 1000) return "";
+    const res = await fetch(CONFIG.serverUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: CONFIG.visionModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: VISION_PROMPT },
+              { type: "image_url", image_url: { url } }
+            ]
+          }
+        ],
+        max_tokens: CONFIG.visionMaxTokens,
+        temperature: 0,
+        chat_template_kwargs: { enable_thinking: false }
+      }),
+      signal: AbortSignal.timeout(left)
+    });
+    if (!res.ok) return "";
+    const json = await res.json();
+    const content = json?.choices?.[0]?.message?.content;
+    const text = (Array.isArray(content) ? content.map((c) => c?.text ?? "").join("\n") : String(content ?? ""))
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/^```\w*\n?|```$/g, "")
+      .trim();
+    return text;
+  } catch {
+    return "";
+  }
+}
+
 // ---------- main ----------
 
 export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onStep = () => {}) {
+  text = String(text ?? "").slice(0, CONFIG.maxInputChars);
+  const emit = (r) => {
+    try {
+      onStep(r);
+    } catch {}
+  };
   try {
-    text = String(text ?? "").slice(0, CONFIG.maxInputChars);
     if (typeof navigator !== "undefined" && navigator.onLine === false) return await quickFallback(text);
-    if (!text.trim()) return await quickFallback(text); // image-only path comes next session
-    return await deepWithTimeout(text, onStep, Date.now() + CONFIG.totalTimeoutMs);
+    const deadline = Date.now() + CONFIG.totalTimeoutMs;
+    const pre = []; // steps before the agent loop (Read screenshot)
+
+    if (imageDataUrl) {
+      const read = await readScreenshot(imageDataUrl, deadline);
+      const r = read
+        ? { tool: "read_screenshot", status: "pass", label: "Read screenshot", detail: "Text read from the image" }
+        : { tool: "read_screenshot", status: "unknown", label: "Read screenshot", detail: "Could not read text from the image" };
+      pre.push(r);
+      emit(r);
+      // Screenshot text first, then anything typed. Masked like typed text before the agent loop.
+      text = [read, text].filter((t) => t.trim()).join("\n\n").slice(0, CONFIG.maxInputChars);
+    }
+
+    if (!text.trim()) return await quickFallback("");
+    return await deepWithTimeout(text, onStep, deadline, pre);
   } catch {
     return quickFallback(text);
   }
 }
 
-async function deepWithTimeout(text, onStep, deadline) {
+async function deepWithTimeout(text, onStep, deadline, pre = []) {
   const state = { done: false };
-  const run = { trace: [], ctx: null, modelOk: false };
+  const run = { trace: [...pre], ctx: null, modelOk: false };
   let timer;
   // Leave ~400ms after the race to finish locally and still be inside the 15s budget.
   const timeout = new Promise((resolve) => {

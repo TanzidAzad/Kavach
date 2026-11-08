@@ -116,6 +116,36 @@ async function checkServer() {
   }
 }
 
+// Voice (Gemini Live): token from our server + the Live WebSocket answers setup within 5 s. Never prints the token.
+// Not counted as a problem if voice fails: the side panel falls back to the browser voice. → warning only.
+async function checkVoice() {
+  const name = "Voice: Gemini Live token + connect (<5s)";
+  const fix = "GEMINI_API_KEY in server/.env, restart `npm start`; demo still works (fallback voice)";
+  const t0 = Date.now();
+  try {
+    const demo = JSON.parse(fs.readFileSync(path.join(ROOT, "agent", "demo_run.json"), "utf8"));
+    const r = await fetch(SERVER.replace("/api/chat", "/api/voice/token"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ verdict: demo.verdict, lang: "es", text: demo.input.preview }), signal: AbortSignal.timeout(5000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.token) return line("warn", name, `token HTTP ${r.status} ${j.error || ""}`, fix);
+    const ok = await new Promise((resolve) => {
+      const ws = new WebSocket(j.wsUrl + "?access_token=" + encodeURIComponent(j.token));
+      const t = setTimeout(() => { try { ws.close(); } catch {} resolve("timeout"); }, Math.max(500, 5000 - (Date.now() - t0)));
+      ws.onopen = () => ws.send(JSON.stringify({ setup: { model: "models/" + j.model } }));
+      ws.onmessage = async (ev) => {
+        const raw = typeof ev.data === "string" ? ev.data : Buffer.from(await ev.data.arrayBuffer()).toString("utf8");
+        if (raw.includes("setupComplete")) { clearTimeout(t); ws.close(1000); resolve(true); }
+      };
+      ws.onclose = (e) => { clearTimeout(t); resolve(e.code === 1000 ? true : `closed ${e.code} ${String(e.reason).slice(0, 60)}`); };
+    });
+    line(ok === true ? true : "warn", name, ok === true ? `${j.model}, ${Date.now() - t0}ms` : String(ok), fix);
+  } catch (e) {
+    line("warn", name, errMsg(e), fix);
+  }
+}
+
 async function checkDeep(runDeepCheck, name, input) {
   const t0 = Date.now();
   let steps = 0;
@@ -167,6 +197,7 @@ function checkReplay() {
   } else {
     line(false, "Deep Check: Spanish text + screenshot", "skipped — server is not running", "`cd server && npm start`, then run preflight again");
   }
+  if (serverUp) await checkVoice();
   checkReplay();
 
   const bad = results.filter((r) => r === false).length;

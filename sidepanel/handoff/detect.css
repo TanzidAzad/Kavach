@@ -82,6 +82,7 @@ button.close {
   height: 32px;
   min-height: 0;
   margin-left: auto;
+  order: 3; /* always on the right, whatever order detect.js adds it in */
   padding: 0;
   border-radius: 50%;
   background: #fff;

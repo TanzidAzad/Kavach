@@ -5,13 +5,15 @@
 // Flow: mask(text) → Nemotron tool loop through our server → run tools locally with the
 // REAL values (unmasked here, never sent) → submit_verdict → rules enforced in code.
 // Any error, timeout, or offline → runQuickCheck(text) (mode "quick"). Never throws.
-// TODO (next session): imageDataUrl → vision model → extracted text.
 
 import { mask, unmaskArgs } from "../core/mask.js";
 import { loadData } from "../core/data.js";
 import { runQuickCheck } from "../core/quickcheck.js";
-import { getToolSchemas, TOOL_RUNNERS } from "./toolSchemas.js";
+import { getToolSchemas, TOOL_RUNNERS, PAYMENTS } from "./toolSchemas.js";
 import { SYSTEM_PROMPT, NUDGE_TOOLS, NUDGE_VERDICT, userMessage } from "./prompts.js";
+import { cleanText, cleanList, pickFamilyMessage, URL_RE } from "./sanitize.js";
+
+export { cleanText };
 
 // ---------- config ----------
 export const CONFIG = {
@@ -19,6 +21,7 @@ export const CONFIG = {
   agentModel: "agent", // logical name only — the server maps it to a real model ID
   visionModel: "vision",
   maxTurns: 6,
+  maxInputChars: 4000, // longer messages are cut (keeps the model fast; scams are short)
   totalTimeoutMs: 15000,
   perCallTimeoutMs: 6000, // with thinking off a turn is ~0.3–1s; a slow call gets one retry
   maxTokens: 2048, // Nemotron thinks first; thinking counts against max_tokens
@@ -112,43 +115,53 @@ function remask(str, map) {
 }
 
 // What the model sees for a tool result: short, re-masked, no URLs.
-function toolMessage(callId, result, map) {
-  const content = JSON.stringify({ status: result.status, label: result.label, detail: result.detail });
+function toolMessage(callId, list, map) {
+  const content = list.length
+    ? JSON.stringify(list.map((r) => ({ status: r.status, label: r.label, detail: r.detail })))
+    : "Skipped: this check does not apply to this message.";
   return { role: "tool", tool_call_id: callId, content: remask(content, map) };
 }
 
-const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|gov|us|info|io|co|app|xyz|top|site|online|me|biz)\b\S*/gi;
-const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/g;
-const PLACEHOLDER_RE = /\[[A-Z]+_\d+\]/g;
+// ---------- what the message contains ----------
 
-// Replace anything that looks like a link, phone number, or placeholder in model text with
-// a plain phrase, so sentences stay readable: "Do not call 214-555-0143" → "Do not call that number".
-// The real official contact is shown separately, from data/official_contacts.json.
-export function cleanText(s) {
-  return String(s ?? "")
-    .replace(/\[PHONE_\d+\]/g, "that number")
-    .replace(/\b(?:case|receipt)(?:\s+number)?\s+\[RECEIPT_\d+\]/gi, "the case number")
-    .replace(/\[RECEIPT_\d+\]/g, "the case number")
-    .replace(PLACEHOLDER_RE, "")
-    .replace(URL_RE, "the website")
-    .replace(PHONE_RE, "that number")
-    .replace(/\b(the website|that number)(?:\s*(?:or|and|,|\/)\s*\1)+/gi, "$1")
-    .replace(/\b(link|website|site|domain|number)\s+(?:the website|that number)/gi, "$1") // "the link X" → "the link"
-    .replace(/\(\s*(?:the website|that number)?\s*\)/gi, "")
-    .replace(/\s*\([^)]*$/, "") // a "(" left open (the link ate the ")") → drop the aside
-    .replace(/\s+([,.;:!?])(?=\s|$)/g, "$1")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .replace(/^[a-z]/, (c) => c.toUpperCase());
+const hostOf = (u) =>
+  String(u ?? "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").split(/[/?#\s]/)[0].replace(/[.,;:!?)]+$/, "");
+
+// Facts found locally (no model): which case numbers and links exist, so we only run
+// checks that apply. Links are read from the MASKED text, so emails don't count as links.
+function messageFacts(text, masked, map) {
+  const receipts = Object.entries(map).filter(([ph]) => ph.startsWith("[RECEIPT_")).map(([, v]) => v);
+  const links = [...new Set((masked.match(new RegExp(URL_RE.source, "gi")) || []).map(hostOf).filter((h) => h.includes(".")))];
+  return { receipts, links };
 }
 
-function cleanList(list, max) {
-  if (!Array.isArray(list)) list = typeof list === "string" ? [list] : [];
-  return list
-    .map(cleanText)
-    .map((s) => (/\bignore\b/i.test(s) ? "Do not reply. Verify through the official channel" : s))
-    .filter((s) => s.length > 2)
-    .slice(0, max);
+// Results that only say "this doesn't apply" — sent to the model, but not shown in the checklist.
+const NOT_APPLICABLE =
+  /^(No case number found|No website link found|The message does not say which agency|Could not tell how this message was sent|No official guidance found)/i;
+const shown = (r) => !(r.status === "unknown" && NOT_APPLICABLE.test(String(r.detail)));
+
+// Runs one tool call safely. Returns ToolResult[] ([] = skipped / not relevant).
+async function runTool(name, args, ctx) {
+  if (name === "validate_case_number") {
+    const value = String(args.caseNumber ?? "").trim();
+    if (!ctx.receipts.includes(value)) return []; // only real case numbers mask() found
+    ctx.checkedReceipts.add(value);
+  }
+  if (name === "check_lookalike_domain") {
+    const host = hostOf(args.url);
+    if (!host || !ctx.links.includes(host)) return []; // only links that are really in the message
+    ctx.checkedLinks.add(host);
+    args = { url: host };
+  }
+  if (name === "check_official_contact") ctx.contactArgs.push(args);
+  const runner = TOOL_RUNNERS[name];
+  try {
+    const out = runner ? await runner(args, ctx) : unknownResult(name);
+    const list = (Array.isArray(out) ? out : [out]).filter((r) => r && typeof r === "object" && r.tool);
+    return list;
+  } catch {
+    return [unknownResult(name)];
+  }
 }
 
 async function findContact(agency) {
@@ -162,44 +175,48 @@ async function findContact(agency) {
   }
 }
 
+const THREATS = [
+  [/deport|deportad|निर्वासन|देश से निकाल|驱逐|遣返/i, "I'll be deported"],
+  [/arrest|arrestad|warrant|orden de arresto|गिरफ्तार|逮捕/i, "I'll be arrested"]
+];
+
 // Turn the model's submit_verdict args into a Verdict (PRD 8.2), enforcing every rule in code.
-async function buildVerdict(args, trace) {
-  let verdict = VERDICTS.includes(args.verdict) ? args.verdict : "suspicious";
+async function buildVerdict(args, trace, ctx) {
+  const modelVerdict = VERDICTS.includes(args.verdict) ? args.verdict : "suspicious";
+  let verdict = modelVerdict;
   let confidence = CONFIDENCES.includes(args.confidence) ? args.confidence : "medium";
 
-  const fails = new Set(trace.filter((r) => r.status === "fail" && r.tool !== "search_guidance").map((r) => r.tool));
-  // Safety net: the model says safe but two different checks found red flags.
-  if (verdict === "safe" && fails.size >= 2) {
+  // A failed check is a real warning sign: never call that "safe".
+  const fails = trace.filter((r) => r.status === "fail");
+  if (verdict === "safe" && fails.length) {
     verdict = "suspicious";
-    confidence = "medium";
+    confidence = new Set(fails.map((r) => r.tool)).size >= 2 ? "medium" : "unsure";
   }
   if (verdict === "safe") confidence = "unsure"; // never safe + high (PRD 13.3); keep it humble
 
   let reasons = cleanList(args.reasons, 3);
-  if (reasons.length === 0) {
-    reasons = trace.filter((r) => r.status === "fail").map((r) => r.detail).slice(0, 3);
-  }
+  if (reasons.length === 0) reasons = cleanList(fails.map((r) => r.detail), 3);
+  if (reasons.length === 0 && verdict === "safe") reasons = ["We did not find common scam warning signs"];
   let steps = cleanList(args.steps, 3);
   if (steps.length === 0) {
     steps = verdict === "safe"
       ? ["If unsure, verify through the official channel"]
       : ["Do not pay or share personal details", "Verify through the official channel"];
   }
-  let familyMessage = cleanText(args.familyMessage);
-  if (familyMessage.length < 10) {
-    familyMessage = `I got a message and Kavach says it looks ${verdict === "scam" ? "like a scam" : verdict}. Can you help me check it before I do anything?`;
-  }
 
-  return {
+  const officialContact = await findContact(args.officialAgency);
+  const claimed = ctx.contactArgs.map((a) => String(a.claimedAgency ?? "").replace(/[^\p{L}\s.&-]/gu, "").trim()).find(Boolean);
+  const payKey = ctx.contactArgs.map((a) => String(a.paymentMethod ?? "").toLowerCase()).find((p) => PAYMENTS[p]);
+  const facts = {
     verdict,
-    confidence,
-    reasons,
-    steps,
-    officialContact: await findContact(args.officialAgency),
-    trace,
-    mode: "deep",
-    familyMessage
+    agency: officialContact?.agency || (claimed && claimed.length <= 30 ? claimed : ""),
+    payment: payKey ? PAYMENTS[payKey] : "",
+    threat: verdict === "safe" ? "" : (THREATS.find(([re]) => re.test(ctx.text)) || [])[1] || ""
   };
+  // If we changed the verdict, the model's family message would say the wrong thing.
+  const familyMessage = verdict === modelVerdict ? pickFamilyMessage(args.familyMessage, facts) : pickFamilyMessage("", facts);
+
+  return { verdict, confidence, reasons, steps, officialContact, trace, mode: "deep", familyMessage };
 }
 
 async function quickFallback(text) {
@@ -219,70 +236,113 @@ async function quickFallback(text) {
   }
 }
 
-// find_red_flags and search_guidance should run on every message. If the model skipped them,
-// run them here (local, instant) so the checklist and trace are complete.
+// find_red_flags and search_guidance run on every message; every case number and link in the
+// message gets checked. If the model skipped any of these, run them here (local, instant) so the
+// checklist is complete. Each line is reported as soon as it finishes.
 async function runBaselineChecks(trace, ctx, step, state) {
-  const ran = new Set(trace.map((r) => r.tool));
+  const ran = new Set(trace.map((r) => r.tool).concat(ctx.ranTools));
   const lang = /[\u0900-\u097F]/.test(ctx.text) ? "hi" : /[\u4e00-\u9fff]/.test(ctx.text) ? "zh" : "en";
   const jobs = [];
-  if (!ran.has("find_red_flags")) jobs.push(TOOL_RUNNERS.find_red_flags({ lang }, ctx));
+  for (const caseNumber of ctx.receipts) {
+    if (!ctx.checkedReceipts.has(caseNumber)) jobs.push(runTool("validate_case_number", { caseNumber }, ctx));
+  }
+  for (const url of ctx.links) {
+    if (!ctx.checkedLinks.has(url)) jobs.push(runTool("check_lookalike_domain", { url }, ctx));
+  }
+  if (!ran.has("find_red_flags")) jobs.push(runTool("find_red_flags", { lang }, ctx));
   if (!ran.has("search_guidance")) {
     const q = ctx.contactArgs
-      .flatMap((a) => [a.claimedAgency, a.paymentMethod])
+      .flatMap((a) => [a.claimedAgency, PAYMENTS[String(a.paymentMethod ?? "").toLowerCase()]])
       .concat(/tarjeta|gift|regalo|礼品卡|गिफ्ट/i.test(ctx.text) ? ["gift card"] : [])
       .filter(Boolean)
       .concat("payment")
       .join(" ");
-    jobs.push(TOOL_RUNNERS.search_guidance({ query: q }, ctx));
+    jobs.push(runTool("search_guidance", { query: q }, ctx));
   }
-  for (const r of await Promise.all(jobs)) {
-    if (state.done || !r) continue;
-    trace.push(r);
-    step(r);
-  }
+  await Promise.all(
+    jobs.map((job) =>
+      job.then((list) => {
+        for (const r of list) {
+          if (state.done || !shown(r)) continue;
+          trace.push(r);
+          step(r);
+        }
+      })
+    )
+  );
+}
+
+// The model answered but didn't finish in time (slow call, or never called submit_verdict).
+// The checks that ran are real: finish the remaining local checks and build the verdict from
+// the trace with the same rules, instead of throwing that work away.
+const SEVERITY = { safe: 0, suspicious: 1, scam: 2 };
+async function finishLocally(run, onStep) {
+  const { trace, ctx } = run;
+  const state = { done: false };
+  await runBaselineChecks(trace, ctx, (r) => {
+    try {
+      onStep(r);
+    } catch {}
+  }, state);
+  const quick = await quickFallback(ctx.text);
+  const failTools = new Set(trace.filter((r) => r.status === "fail" && r.tool !== "search_guidance").map((r) => r.tool));
+  const fromTrace = failTools.size >= 2 ? "scam" : failTools.size === 1 ? "suspicious" : "safe";
+  const verdict = SEVERITY[quick.verdict] > SEVERITY[fromTrace] ? quick.verdict : fromTrace;
+  const agency = ctx.contactArgs.map((a) => a.claimedAgency).find(Boolean) || quick.officialContact?.agency || "none";
+  return buildVerdict({ verdict, confidence: "medium", reasons: [], steps: [], officialAgency: agency, familyMessage: "" }, trace, ctx);
 }
 
 // ---------- main ----------
 
 export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onStep = () => {}) {
-  text = String(text ?? "");
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return quickFallback(text);
-  if (!text.trim()) return quickFallback(text); // image-only path comes next session
+  try {
+    text = String(text ?? "").slice(0, CONFIG.maxInputChars);
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return await quickFallback(text);
+    if (!text.trim()) return await quickFallback(text); // image-only path comes next session
+    return await deepWithTimeout(text, onStep, Date.now() + CONFIG.totalTimeoutMs);
+  } catch {
+    return quickFallback(text);
+  }
+}
 
-  const deadline = Date.now() + CONFIG.totalTimeoutMs;
+async function deepWithTimeout(text, onStep, deadline) {
   const state = { done: false };
+  const run = { trace: [], ctx: null, modelOk: false };
   let timer;
+  // Leave ~400ms after the race to finish locally and still be inside the 15s budget.
   const timeout = new Promise((resolve) => {
-    timer = setTimeout(() => resolve(null), CONFIG.totalTimeoutMs);
+    timer = setTimeout(() => resolve(null), Math.max(0, remainingMs(deadline) - 400));
   });
   try {
-    const result = await Promise.race([deepLoop(text, onStep, deadline, state), timeout]);
+    const result = await Promise.race([deepLoop(text, onStep, deadline, state, run).catch(() => null), timeout]);
     state.done = true;
-    return result || (await quickFallback(text));
-  } catch {
-    state.done = true;
-    return quickFallback(text);
+    if (result) return result;
+    if (run.modelOk && run.ctx) return await finishLocally(run, onStep);
+    return await quickFallback(text);
   } finally {
     state.done = true;
     clearTimeout(timer);
   }
 }
 
-async function deepLoop(text, onStep, deadline, state) {
+async function deepLoop(text, onStep, deadline, state, run) {
   const { masked, map } = mask(text); // map stays here — never sent
-  const tools = await getToolSchemas();
-  const ctx = { text, contactArgs: [] }; // contactArgs: unmasked check_official_contact args seen so far
+  const { receipts, links } = messageFacts(text, masked, map);
+  const tools = await getToolSchemas({ hasCaseNumber: receipts.length > 0, hasLink: links.length > 0 });
+  // ctx stays local. contactArgs = unmasked check_official_contact args seen so far.
+  const ctx = { text, receipts, links, contactArgs: [], checkedReceipts: new Set(), checkedLinks: new Set(), ranTools: [] };
+  run.ctx = ctx;
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: userMessage(masked) }
   ];
-  const trace = [];
+  const trace = run.trace;
   const seen = new Map(); // "name|args" → ToolResult, to skip exact duplicate calls
   let nudgedText = false;
   let nudgedEarly = false;
 
   const step = (r) => {
-    if (state.done) return; // timed out: popup already has the quick result
+    if (state.done) return; // timed out: the result is being finished elsewhere
     try {
       onStep(r);
     } catch {}
@@ -294,6 +354,7 @@ async function deepLoop(text, onStep, deadline, state) {
 
     if (state.done) return null;
     const msg = await callModel(messages, tools, deadline, turn === 0 ? CONFIG.thinkFirstTurn : CONFIG.thinkLaterTurns);
+    run.modelOk = true;
     const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
 
     if (calls.length === 0) {
@@ -328,33 +389,27 @@ async function deepLoop(text, onStep, deadline, state) {
     const results = await Promise.all(
       toolCalls.map(async (c, i) => {
         if (!c.id) c.id = `call_${turn}_${i}`;
-        const name = c?.function?.name;
+        const name = String(c?.function?.name ?? "");
         const args = unmaskArgs(parseArgs(c?.function?.arguments), map);
-        if (name === "check_official_contact") ctx.contactArgs.push(args);
         const key = name + "|" + JSON.stringify(args);
-        if (seen.has(key)) return { c, result: await seen.get(key), dup: true };
-        const pending = (async () => {
-          const runner = TOOL_RUNNERS[name];
-          try {
-            const r = runner ? await runner(args, ctx) : unknownResult(name);
-            return r && typeof r === "object" ? r : unknownResult(name);
-          } catch {
-            return unknownResult(name);
-          }
-        })();
+        if (seen.has(key)) return { c, list: await seen.get(key), dup: true };
+        const pending = runTool(name, args, ctx);
         seen.set(key, pending); // set before awaiting so same-turn duplicates are skipped too
-        const result = await pending;
-        if (state.done) return { c, result, dup: false };
-        trace.push(result);
-        step(result);
-        return { c, result, dup: false };
+        const list = await pending;
+        if (list.length) ctx.ranTools.push(name);
+        for (const r of list) {
+          if (state.done || !shown(r)) continue;
+          trace.push(r);
+          step(r);
+        }
+        return { c, list, dup: false };
       })
     );
     if (state.done) return null;
 
     if (verdictCall) {
       await runBaselineChecks(trace, ctx, step, state);
-      return buildVerdict(parseArgs(verdictCall.function?.arguments), trace);
+      return buildVerdict(parseArgs(verdictCall.function?.arguments), trace, ctx);
     }
 
     // Send results back (masked). Tool-call args we echo are the model's own (masked) args.
@@ -367,8 +422,8 @@ async function deepLoop(text, onStep, deadline, state) {
         function: { name: c.function?.name, arguments: remask(JSON.stringify(parseArgs(c.function?.arguments)), map) }
       }))
     });
-    for (const { c, result, dup } of results) {
-      const m = toolMessage(c.id, result, map);
+    for (const { c, list, dup } of results) {
+      const m = toolMessage(c.id, list, map);
       if (dup) m.content = "Already checked (same result): " + m.content;
       messages.push(m);
     }

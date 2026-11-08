@@ -4,7 +4,7 @@
 // the model only names the agency; the real contact is looked up from data/).
 //
 // Parameters match the REAL signatures in core/tools.js:
-//   checkOfficialContact({ claimedAgency, channel, paymentMethod })  ← one object
+//   checkOfficialContact({ claimedAgency, channel, paymentMethod })  ← one object (channel/payment from fixed enums)
 //   validateCaseNumber(caseNumber)                                   ← one string
 //   checkLookalikeDomain(url)                                        ← one string
 //   findRedFlags(text, lang)                                         ← two strings
@@ -38,13 +38,71 @@ const given = (v) => {
   return /^(unknown|none|n\/a|na|null|not specified|not mentioned|unspecified|-)?$/i.test(s) ? "" : s;
 };
 
+// Fixed choices for check_official_contact (the model picks one; it never writes free text here).
+// Each maps to the words core/tools.js + data/official_contacts.json understand.
+export const CHANNELS = {
+  whatsapp: "WhatsApp",
+  sms: "text message",
+  email: "email",
+  phone_call: "phone call",
+  mail: "mail",
+  online_account: "online account", // core alias → "myUSCIS account"
+  social_media: "social media",
+  unknown: ""
+};
+export const PAYMENTS = {
+  gift_card: "gift cards",
+  crypto: "cryptocurrency",
+  wire_transfer: "wire transfer",
+  payment_app: "a payment app",
+  cash: "cash",
+  none: "",
+  unknown: ""
+};
+// Nicer wording in the checklist line: "through phone call" → "by phone call".
+const CHANNEL_PHRASE = {
+  "WhatsApp": "on WhatsApp",
+  "text message": "by text message",
+  "email": "by email",
+  "phone call": "by phone call",
+  "mail": "by mail",
+  "social media": "on social media"
+};
+
+const pick = (table, v) => table[String(v ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_")] ?? "";
+
+function polish(r, channel) {
+  if (!r || typeof r.detail !== "string") return r;
+  let d = r.detail;
+  if (channel && CHANNEL_PHRASE[channel]) d = d.replace(`through ${channel}`, CHANNEL_PHRASE[channel]);
+  d = d.replace(/payment by a payment app/, "payment by payment apps");
+  return { ...r, detail: d.charAt(0).toUpperCase() + d.slice(1) };
+}
+
+// Runs check_official_contact. When the message has both a channel and a payment, run them as
+// two checks so the checklist shows two clear lines ("Sender channel", "Payment method").
+// Returns a ToolResult, an array of them, or null (= not relevant, don't show it).
+async function officialContact(a) {
+  const claimedAgency = String(a.claimedAgency ?? "").replace(/[^\p{L}\s.&-]/gu, "").trim().slice(0, 40);
+  if (!given(claimedAgency)) return null;
+  const channel = pick(CHANNELS, a.channel);
+  const paymentMethod = pick(PAYMENTS, a.paymentMethod);
+  if (!channel && !paymentMethod) return checkOfficialContact({ claimedAgency });
+  if (!channel || !paymentMethod) {
+    return polish(await checkOfficialContact({ claimedAgency, channel, paymentMethod }), channel);
+  }
+  const [c, p] = await Promise.all([
+    checkOfficialContact({ claimedAgency, channel }),
+    checkOfficialContact({ claimedAgency, paymentMethod })
+  ]);
+  // Agency not in our data: the channel line only says "no details" — the payment line is enough.
+  if (c.status === "unknown" && p.status !== "unknown") return polish(p);
+  if (c.detail === p.detail) return polish(p);
+  return [polish(c, channel), polish(p)];
+}
+
 export const TOOL_RUNNERS = {
-  check_official_contact: (a) =>
-    checkOfficialContact({
-      claimedAgency: given(a.claimedAgency),
-      channel: given(a.channel),
-      paymentMethod: given(a.paymentMethod)
-    }),
+  check_official_contact: officialContact,
   validate_case_number: (a) => validateCaseNumber(a.caseNumber ?? ""),
   // A real link has a dot ("uscis-help.com"). Names like "myUSCIS" are not links.
   check_lookalike_domain: (a) => checkLookalikeDomain(String(a.url ?? "").includes(".") ? a.url : ""),
@@ -58,17 +116,18 @@ const INVESTIGATION_TOOLS = [
   fn(
     "check_official_contact",
     "Use when the message claims to come from a government agency (USCIS, IRS, ICE, Social Security, police, etc.). " +
-      "Checks if that agency really contacts people through this channel and accepts this payment method.",
+      "Checks if that agency really contacts people this way and accepts this payment method.",
     {
-      claimedAgency: str("Agency the message claims to be from, short English name, e.g. \"USCIS\", \"IRS\"."),
+      claimedAgency: str("Agency the message claims to be from, short English name, e.g. \"USCIS\", \"IRS\", \"ICE\"."),
       channel: str(
-        "How the message says it was sent or asks you to reply, e.g. \"WhatsApp\", \"phone call\", \"email\". Only if the message itself names it; otherwise leave empty. Do not guess."
+        "How the message was sent or asks you to reply. Pick \"unknown\" unless the message itself says it (e.g. mentions WhatsApp).",
+        { enum: Object.keys(CHANNELS) }
       ),
-      paymentMethod: str(
-        "Payment the message asks for, short English, e.g. \"gift card\", \"crypto\", \"wire transfer\", \"Zelle\". Empty if none."
-      )
+      paymentMethod: str("Payment the message asks for. \"none\" if it asks for no payment.", {
+        enum: Object.keys(PAYMENTS)
+      })
     },
-    ["claimedAgency"]
+    ["claimedAgency", "channel", "paymentMethod"]
   ),
   fn(
     "validate_case_number",
@@ -112,20 +171,26 @@ function submitVerdictSchema(agencies) {
         type: "array",
         maxItems: 3,
         items: { type: "string" },
-        description: "Up to 3 short reasons in simple English, one sentence each. No phone numbers, no links."
+        description:
+          "Up to 3 short reasons in simple English, one sentence each, e.g. \"USCIS does not contact people on WhatsApp\". " +
+          "Never include links, phone numbers, case numbers, or placeholders like [PHONE_1] — say \"the link\", \"that phone number\", \"the case number\"."
       },
       steps: {
         type: "array",
         maxItems: 3,
         items: { type: "string" },
         description:
-          "Up to 3 short next steps in simple English, e.g. \"Do not pay anything\", \"Verify through the official channel\". No phone numbers, no links."
+          "Up to 3 short next steps in simple English, e.g. \"Do not pay anything\", \"Do not call that phone number\", \"Verify through the official channel\". " +
+          "Never include links, phone numbers, case numbers, or placeholders."
       },
       officialAgency: str("The agency the message claims to be from, if it is in this list; otherwise \"none\".", {
         enum: [...agencies, "none"]
       }),
       familyMessage: str(
-        "A short message in simple English the person can send to a family member to ask for help, describing the message and the verdict. No phone numbers, no links."
+        "Written BY the person who got the message, TO a family member, in first person. EXACTLY 3 short sentences: " +
+          "(1) \"I got a message that says it's from <agency> …\" plus what it asks for or threatens, (2) what Kavach found, (3) ask for help. Example: " +
+          "\"I got a message that says it's from USCIS asking me to pay with gift cards or I'll be deported. Kavach says it looks like a scam. Can you help me check it before I do anything?\" " +
+          "No amounts, dates, phone numbers, links, case numbers, or placeholders like [PHONE_1]."
       )
     },
     ["verdict", "confidence", "reasons", "steps", "officialAgency", "familyMessage"]
@@ -134,14 +199,22 @@ function submitVerdictSchema(agencies) {
 
 let schemasPromise = null;
 
-// Returns all tool schemas (investigation tools + submit_verdict).
+// Returns the tool schemas for this message (investigation tools + submit_verdict).
+// Tools that can't apply are left out: validate_case_number only if mask() found a case/receipt
+// number, check_lookalike_domain only if the message has a link.
 // Async because the officialAgency enum comes from data/official_contacts.json.
-export function getToolSchemas() {
+export async function getToolSchemas({ hasCaseNumber = true, hasLink = true } = {}) {
   if (!schemasPromise) {
     schemasPromise = loadData("official_contacts.json")
       .then((contacts) => contacts.map((c) => c.agency).filter(Boolean))
       .catch(() => [])
       .then((agencies) => [...INVESTIGATION_TOOLS, submitVerdictSchema(agencies)]);
   }
-  return schemasPromise;
+  const all = await schemasPromise;
+  return all.filter((t) => {
+    const n = t.function.name;
+    if (n === "validate_case_number") return hasCaseNumber;
+    if (n === "check_lookalike_domain") return hasLink;
+    return true;
+  });
 }

@@ -76,7 +76,11 @@ async function routes(logical) {
 // tool_choice:"auto" with HTTP 400. The model still writes calls as text in the qwen3_coder XML format:
 //   <tool_call><function=NAME><parameter=KEY>VALUE</parameter>…</function></tool_call>
 // So we resend with tool_choice:"none" (tools stay in the prompt) and turn that text into tool_calls.
-let brevNoToolParser = false;
+// Fallback only: the real parser (--enable-auto-tool-choice --tool-call-parser qwen3_coder) is the normal path.
+// After a "no parser" 400 we use the shim for 5 min, then try real tool calling again (container may be fixed).
+let brevNoToolParserAt = 0;
+const SHIM_RETRY_MS = 5 * 60 * 1000;
+const shimActive = () => brevNoToolParserAt > 0 && Date.now() - brevNoToolParserAt < SHIM_RETRY_MS;
 const NO_PARSER_RE = /tool-call-parser|auto-tool-choice/i;
 
 function paramType(tools, fn, key) {
@@ -162,14 +166,14 @@ app.post("/api/chat", async (req, res) => {
     used = rt.backend;
     let upstreamBody = { ...body, model: MODELS[rt.backend][logical], stream: false };
     const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
-    const shim = rt.backend === "brev" && hasTools && brevNoToolParser;
+    const shim = rt.backend === "brev" && hasTools && shimActive();
     if (shim) upstreamBody.tool_choice = "none";
     try {
       let r = await attempt(rt, upstreamBody, rt.backend === "brev" ? BREV_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS);
       // First time we learn Brev has no tool parser: remember it and retry this request with the shim.
       if (rt.backend === "brev" && hasTools && !shim && r.status === 400 && NO_PARSER_RE.test(r.text)) {
-        brevNoToolParser = true;
-        console.log("brev: no tool-call parser on the container → parsing tool calls in the proxy (restart vLLM with --enable-auto-tool-choice --tool-call-parser qwen3_coder)");
+        brevNoToolParserAt = Date.now();
+        console.log("brev: TOOL SHIM FALLBACK ON — no tool-call parser on the container → parsing tool calls in the proxy (restart vLLM with --enable-auto-tool-choice --tool-call-parser qwen3_coder)");
         upstreamBody = { ...upstreamBody, tool_choice: "none" };
         r = await attempt(rt, upstreamBody, BREV_TIMEOUT_MS);
       }
@@ -178,7 +182,9 @@ app.post("/api/chat", async (req, res) => {
       }
       status = r.json === null ? (r.ok ? 502 : r.status) : r.status;
       out = r.json === null ? { error: "upstream returned non-JSON", upstreamStatus: r.status } : r.json;
-      if (rt.backend === "brev" && brevNoToolParser && hasTools && r.ok) { out = parseXmlToolCalls(out, body.tools); note += " (tool shim)"; }
+      if (rt.backend === "brev" && hasTools && upstreamBody.tool_choice === "none" && body.tool_choice !== "none" && r.ok) {
+        out = parseXmlToolCalls(out, body.tools); note += " (tool shim fallback)";
+      }
       break;
     } catch (e) {
       const timedOut = e && (e.name === "TimeoutError" || e.name === "AbortError");

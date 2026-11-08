@@ -26,8 +26,6 @@
   `agent/test/make_screenshot.html` (draws fake WhatsApp screenshots → `agent/test/*.png`, both committed).
 
 ## Next
-- **Restart the Brev container with the tool parser** (Rafid, on the Brev machine) — see "Brev container flags". Then
-  `npm run smoke -- brev` must show `PASS tool call` and the server log stops saying `(tool shim)`.
 - Verify in the real extension popup once Role 1 wires the screenshot upload (works in dev.html + headless Chrome).
 - Re-record `agent/demo_run.json` the night before the demo (see Record below) so it matches final data.
 
@@ -55,7 +53,14 @@ never safe+high, safe never has a failed check. Real Chrome (headless, same code
 86 KB JPEG, deep scam/high, 6 steps, 6.0s.
 Occasional hosted latency spike (one call 6–9s): the run still finishes inside 15s (retry or local finish).
 
-## Results Brev vs hosted (2026-11-07, thinking off) — `node agent/test/run_deep.mjs 3`
+## Results Brev with native tool calling (2026-11-08) — `node agent/test/run_deep.mjs 3`
+Container parser on (`qwen3_coder`), shim never used. Smoke 5/5 (tool call 284 ms, thinking off).
+39/39 PASS. Verdicts ×3: es-text, en-irs, hi-ice, very-long, es/hi-screenshot scam/high; zh-lookalike scam/unsure;
+en-safe safe/unsure; mocked/quick cases unchanged. ms: es-text 2156·1907·1889, en-irs 1648·1652·1693,
+hi-ice 1687·1781·1753, zh 3954·2079·1996, en-safe 1731·1696·1820, very-long 2065·2013·2101,
+es-screenshot 3603·5957·4229, hi-screenshot 3537·3565·3479. ≈1.0s per agent call — same as with the shim.
+
+## Results Brev (shim) vs hosted (2026-11-07, thinking off) — `node agent/test/run_deep.mjs 3`
 Brev = self-hosted NIM, vLLM int4, `nvidia/nemotron-3.5-lightning`, tool calls via proxy shim; vision on hosted.
 | case | hosted verdict | Brev verdict (×3) | hosted ms | Brev ms (3 rounds) | Brev result |
 |---|---|---|---|---|---|
@@ -77,14 +82,25 @@ Brev = self-hosted NIM, vLLM int4, `nvidia/nemotron-3.5-lightning`, tool calls v
   B) health OK but chat drops the connection → `(brev unreachable → hosted)` in the same request, 0.35s;
   C) Brev 503 → `(brev 503 → hosted)`, 1.5s. Later requests skip Brev for 30s (health cache), then re-check.
 
-## Brev container flags (tool calling)
-The container started without a tool parser: `"auto" tool choice requires --enable-auto-tool-choice and
---tool-call-parser`. Raw output with tools shows the format
-`<tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>…</tool_call>` = vLLM's **`qwen3_coder`** parser.
-On restart add (vLLM args): `--enable-auto-tool-choice --tool-call-parser qwen3_coder`.
-NIM-style env vars (if the image takes env, not args — check the image docs): `NIM_ENABLE_AUTO_TOOL_CHOICE=1`,
-`NIM_TOOL_CALL_PARSER=qwen3_coder`. `enable_thinking:false` already works (no reasoning tokens, 3-token "pong").
-Until then the proxy shim handles it (tested 39/39), so this is a nice-to-have, not a blocker.
+## Brev container (tool calling ON — working command, 2026-11-08)
+Run on the Brev machine (`ssh modest-jade-panda '…'`, never `brev shell`). Only touch `kavach-llm`; never delete
+`~/.cache/nim`; never print the key.
+```bash
+docker stop kavach-llm && docker rm kavach-llm
+docker run -d --name kavach-llm --restart unless-stopped --gpus all --shm-size=16GB \
+  -e NGC_API_KEY="$(cat ~/.ngc_key)" \
+  -e NIM_PASSTHROUGH_ARGS="--enable-auto-tool-choice --tool-call-parser qwen3_coder" \
+  -v "$HOME/.cache/nim:/opt/nim/.cache" -u $(id -u) -p 8000:8000 \
+  nvcr.io/nim/nvidia/nemotron-3.5-lightning-30b-a3b:latest
+docker logs kavach-llm 2>&1 | grep "Launching vLLM"     # must contain --enable-auto-tool-choice --tool-call-parser qwen3_coder
+curl -s -o /dev/null -w "%{http_code}\n" localhost:8000/v1/health/ready   # 200 when ready (~3 min, weights cached)
+```
+- **Why passthrough:** `NIM_ENABLE_AUTO_TOOL_CHOICE` / `NIM_TOOL_CALL_PARSER` are NOT read by this image (grep of
+  `nim_llm` source: no such names). It reads `NIM_PASSTHROUGH_ARGS` (parsed as CLI args, priority
+  CLI > PASSTHROUGH > ENV) and appends them to `vllm serve`. vLLM 0.32.0 in the image has `qwen3_coder`
+  (also `qwen3_xml`, `qwen3_json`). The model's raw tool output is the qwen3_coder XML format.
+- No reasoning parser is set; we send `enable_thinking:false` (works: no reasoning tokens).
+- Known-good fallback (no tool calling; proxy shim covers it): same command without the `NIM_PASSTHROUGH_ARGS` line.
 
 ## Models
 | Logical | Hosted model ID | Latency |
@@ -123,9 +139,11 @@ Backups: `nemotron-3-ultra-550b` (agent), `nemotron-3-nano-omni-30b-a3b-reasonin
 - **Brev routing:** each request gets a list [Brev if `NIM_BACKEND=brev` and healthy, hosted if key]. Brev network
   error / 12s timeout / 5xx / non-JSON → mark Brev down 30s and retry hosted in the same request. 4xx is passed through.
   Vision: Brev only if `BREV_VL_URL` is set (there is no VL NIM on Brev now) — otherwise straight to hosted.
-- **Tool shim:** if Brev answers 400 "tool-call-parser", the proxy remembers it (until restart), resends with
+- **Tool shim (fallback only):** normal path is the container's own parser. If Brev answers 400 "tool-call-parser",
+  the proxy logs `TOOL SHIM FALLBACK ON`, uses the shim for 5 min (then tries real tool calling again), resends with
   `tool_choice:"none"` (vLLM still puts the tools in the prompt) and converts `<tool_call>` XML in `content` into
-  OpenAI `tool_calls` (array/number args JSON-parsed using the request's tool schema). Log lines say `(tool shim)`.
+  OpenAI `tool_calls` (array/number args JSON-parsed using the request's tool schema). Log lines say
+  `(tool shim fallback)`. Tested against a fake parserless server (2026-11-08).
 - `other_fee` payment choice maps to "" (no payment-method line) — for fees with no method named.
 
 ## How to run the server
@@ -177,11 +195,12 @@ Same verdicts as hosted, 2–4× faster and steadier on text, no shared rate lim
 set `NIM_BACKEND=hosted` and restart — nothing else changes.
 
 ## Demo-day startup order (Brev)
-1. **Brev instance** up, NIM container running (with the tool-parser flags above if restarted). Wait until ready.
+1. **Brev instance** up, `kavach-llm` running (it has `--restart unless-stopped`; if not, use the command in
+   "Brev container" above). `ssh modest-jade-panda 'curl -s -o /dev/null -w "%{http_code}" localhost:8000/v1/health/ready'` → 200.
 2. **Port-forward:** `brev port-forward <instance> -p 8000:8000` (LLM on localhost:8000). Check:
    `curl -s localhost:8000/v1/models` → shows `nvidia/nemotron-3.5-lightning`.
 3. **server/.env:** `NIM_BACKEND=brev`, `BREV_LLM_MODEL=nvidia/nemotron-3.5-lightning`, `NVIDIA_API_KEY` present.
-   Don't set `BREV_VL_URL`. Then `cd server && npm run smoke -- brev` (vision PASS; tool call PASS once flags are on).
+   Don't set `BREV_VL_URL`. Then `cd server && npm run smoke -- brev` → 5/5 PASS (tool call must PASS).
 4. **`cd server && npm start`** → `brev (agent http://localhost:8000, vision hosted), hosted fallback on`.
 5. **Health check:** curl above → `choices`; log line `agent brev 200`. Then
    `node agent/test/run_deep.mjs 1 es-screenshot` → PASS (log: `agent brev`, `vision hosted`).

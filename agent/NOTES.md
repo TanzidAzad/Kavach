@@ -8,6 +8,7 @@ native tool calling, hosted key, vision, server, Spanish text + screenshot Deep 
 After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on the slide. Median 2.9 s, p90 ≤5.3 s, 0 fallbacks.
 
 ## Done
+- 2026-11-07: translation-friendly reasons/steps/familyMessage — prompt + submit_verdict descriptions require one short, complete, literal sentence (subject + verb), no idioms ("create urgency", "red flag", "too good to be true"), no abbreviations except agency names. demo_run.json re-recorded. `run_deep.mjs 2`: ALL PASSED.
 - `server/index.js` — proxy (PRD 8.5): POST /api/chat only, logical models `agent` / `vision`, hosted + brev,
   10 MB body limit, clean JSON errors, `X-Kavach-Backend` response header (`brev` / `hosted` / `hosted fallback`).
   - Brev → hosted per request: unreachable / 12s timeout / 5xx / non-JSON, **plus a watchdog**: while a Brev call
@@ -185,6 +186,7 @@ Backups: `nemotron-3-ultra-550b` (agent), `nemotron-3-nano-omni-30b-a3b-reasonin
   OpenAI `tool_calls` (array/number args JSON-parsed using the request's tool schema). Log lines say
   `(tool shim fallback)`. Tested against a fake parserless server (2026-11-08).
 - `other_fee` payment choice maps to "" (no payment-method line) — for fees with no method named.
+- Output text is machine-translated (Chrome Translator) → reasons/steps/familyMessage must be literal full sentences, no idioms. Good: "The message threatens you with deportation." / "Real agencies do not rush you to pay the same day."
 
 ## How to run the server
 ```bash

@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "recordedAt": "2026-11-08T00:39:37.917Z",
+  "recordedAt": "2026-11-08T05:14:52.100Z",
   "input": {
     "kind": "screenshot",
     "preview": "10:42\n87%\n[PHONE_1]\nen línea\nHOY\nUSCIS AVISO OFICIAL: Su caso\n[RECEIPT_1] tiene un problema.\n10:42\nDebe pagar $500 en tarjetas de\nregalo HOY o será deportado.\n10:42\nLlame al [PHONE_2] o responda\npor e"
   },
   "steps": [
     {
-      "t": 2106,
+      "t": 3705,
       "result": {
         "tool": "read_screenshot",
         "status": "pass",
@@ -16,7 +16,7 @@
       }
     },
     {
-      "t": 4063,
+      "t": 4736,
       "result": {
         "tool": "validate_case_number",
         "status": "pass",
@@ -26,63 +26,53 @@
       }
     },
     {
-      "t": 4064,
+      "t": 4736,
       "result": {
         "tool": "check_official_contact",
         "status": "fail",
         "label": "Sender channel",
         "detail": "USCIS does not contact people on WhatsApp",
-        "source": "https://www.uscis.gov/"
+        "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
       }
     },
     {
-      "t": 4064,
+      "t": 4736,
       "result": {
         "tool": "check_official_contact",
         "status": "fail",
         "label": "Payment method",
         "detail": "USCIS never asks for payment by gift cards",
-        "source": "https://www.uscis.gov/"
+        "source": "https://www.uscis.gov/scams-fraud-and-misconduct/avoid-scams/common-scams"
       }
     },
     {
-      "t": 4067,
+      "t": 4740,
       "result": {
         "tool": "find_red_flags",
         "status": "fail",
         "label": "Warning signs",
-        "detail": "Government agencies never take gift cards"
-      }
-    },
-    {
-      "t": 4068,
-      "result": {
-        "tool": "search_guidance",
-        "status": "fail",
-        "label": "Official guidance",
-        "detail": "USCIS will never ask for payment by gift card.",
-        "source": "https://www.uscis.gov/"
+        "detail": "Government agencies never take gift cards (and 1 more warning signs)"
       }
     }
   ],
-  "totalMs": 6343,
+  "totalMs": 6338,
   "verdict": {
     "verdict": "scam",
     "confidence": "high",
     "reasons": [
-      "USCIS does not contact people on WhatsApp",
-      "USCIS never asks for payment by gift cards",
-      "The message threatens deportation to create urgency"
+      "The message threatens you with deportation.",
+      "USCIS does not contact people on WhatsApp.",
+      "USCIS never asks for payment by gift cards."
     ],
     "steps": [
-      "Do not pay anything",
-      "Do not call that phone number or reply on WhatsApp",
-      "Verify through the official USCIS website or contact USCIS directly"
+      "Do not pay any money.",
+      "Do not call that phone number or reply on WhatsApp.",
+      "Verify your case on the official USCIS website."
     ],
     "officialContact": {
       "agency": "USCIS",
-      "url": "https://www.uscis.gov/",
-      "phone": "TODO: copy verified number from uscis.gov"
+      "url": "https://www.uscis.gov/contactcenter",
+      "phone": "800-375-5283"
     },
     "mode": "deep",
     "familyMessage": "I got a message that says it's from USCIS asking me to pay with gift cards or I'll be deported. Kavach says it looks like a scam. Can you help me check it before I do anything?"

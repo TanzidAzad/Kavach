@@ -37,27 +37,27 @@
   "content_scripts": [
     {
       "matches": [
-        "https://example.com/*"
+        "<all_urls>"
       ],
       "js": [
-        "sidepanel/test/card-test.js"
-      ]
+        "content/extract.js",
+        "content/detect.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
+        "core/*.js",
+        "data/*.json",
+        "content/detect.css",
         "sidepanel/brand/mark-dark.png",
         "sidepanel/brand/mark-cream.png",
         "sidepanel/brand/logo-header.png"
       ],
       "matches": [
-        "https://mail.google.com/*",
-        "https://outlook.live.com/*",
-        "https://outlook.office.com/*",
-        "https://outlook.office365.com/*",
-        "https://web.whatsapp.com/*",
-        "https://example.com/*"
+        "<all_urls>"
       ]
     }
   ]

@@ -115,6 +115,9 @@ li + li { margin-top: 2px; }
 
 #checklist { padding-left: 0; list-style: none; }
 #checklist li { animation: fade-in 300ms ease-in; }
+#checklist.compact { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; }
+#checklist.compact li { margin: 0; animation: none; }
+#checklist.compact .sep, #checklist.compact .detail { display: none; }
 .mark { display: inline-block; width: 1.2em; font-weight: 600; color: var(--grey); }
 .mark.fail { color: var(--scam); }
 .mark.pass { color: var(--safe); }

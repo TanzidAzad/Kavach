@@ -1,6 +1,6 @@
-# For Role 2: card restyle (same look as the floating Kavach panel)
+# For Role 2: card restyle + drag (same look and feel as the floating Kavach panel)
 
-Replace `content/detect.css` with `sidepanel/handoff/detect.css` (whole file). That's all — no JS changes.
-
-Latest version: "liquid glass" — more see-through frosted card, glassy white tiles/buttons with a bright top edge,
-smoky dark "Check it", and a quick springy press on every button (transform only, so it stays smooth).
+1. Replace `content/detect.css` with `sidepanel/handoff/detect.css` (whole file).
+   Liquid glass card, glassy buttons with a springy press, glass lightens under the mouse.
+2. Make the card draggable by its header: paste `sidepanel/handoff/card-drag.js` into `content/detect.js` → `showCard()`,
+   right after `head.append(close, logo, "Kavach");` (it uses the `head`, `card` and `box` variables already there).

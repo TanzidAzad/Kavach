@@ -613,6 +613,57 @@ function closeFloat() {
 }
 if (!FLOAT) addEventListener("keydown", (e) => { if (e.key === "Escape") closeOpenSheet(); });
 if (FLOAT) {
+  // --- Light that follows the mouse ---
+  const glow = $("glow");
+  let gx = 0, gy = 0, glowFrame = 0;
+  addEventListener("pointermove", (e) => {
+    gx = e.clientX; gy = e.clientY;
+    document.body.classList.add("hovering");
+    if (!glowFrame) glowFrame = requestAnimationFrame(() => {
+      glowFrame = 0;
+      glow.style.transform = `translate3d(${gx}px, ${gy}px, 0)`;
+    });
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", () => document.body.classList.remove("hovering"));
+
+  // --- Drag the panel by its top bar (anywhere except the language picker and ✕) ---
+  // Screen coordinates stay steady while the frame moves under the mouse; float.js moves the frame.
+  const head = document.querySelector("header");
+  let drag = null, dragFrame = 0;
+  head.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("button, select, a, input")) return;
+    drag = { x: e.screenX, y: e.screenY, dx: 0, dy: 0 };
+    head.setPointerCapture(e.pointerId);
+    document.body.classList.add("dragging");
+    // The page also follows the mouse (in case it leaves this frame on a fast move): both use screen coordinates.
+    window.parent.postMessage({ kavach: "drag-start", sx: e.screenX, sy: e.screenY }, "*");
+    e.preventDefault();
+  });
+  head.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    drag.dx = e.screenX - drag.x;
+    drag.dy = e.screenY - drag.y;
+    if (!dragFrame) dragFrame = requestAnimationFrame(() => {
+      dragFrame = 0;
+      if (drag) window.parent.postMessage({ kavach: "drag-move", dx: drag.dx, dy: drag.dy }, "*");
+    });
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    drag = null;
+    document.body.classList.remove("dragging");
+    window.parent.postMessage({ kavach: "drag-end" }, "*");
+  };
+  head.addEventListener("pointerup", endDrag);
+  head.addEventListener("pointercancel", endDrag);
+  addEventListener("message", (e) => {
+    // The page saw the mouse button go up (outside this frame): stop here too.
+    if (e.source === window.parent && e.data?.kavach === "drag-ended" && drag) {
+      drag = null;
+      document.body.classList.remove("dragging");
+    }
+  });
+
   document.documentElement.classList.add("float");
   document.body.classList.add("float");
   $("close").hidden = false;

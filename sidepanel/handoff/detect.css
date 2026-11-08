@@ -39,8 +39,19 @@
 @keyframes kv-open { from { opacity: 0; transform: scale(0.9) translateY(10px); } 60% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card, button { animation: none; transition: none; } }
 
-/* Logo + name on the left, round ✕ on the right (same as the floating panel) */
+/* Glass lightens under the mouse; lifts a little while dragged */
+.card { transition: background-color 250ms ease, box-shadow 200ms ease; }
+.card:hover { background: rgba(250, 250, 253, 0.6); }
+.card.dragging {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 32px 70px -12px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.16);
+}
+
+/* Logo + name on the left, round ✕ on the right (same as the floating panel). The header is the drag handle. */
 .head {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -49,7 +60,8 @@
   font-weight: 700;
   letter-spacing: -0.2px;
 }
-.logo { width: auto; height: 22px; flex: none; }
+.logo { width: auto; height: 22px; flex: none; pointer-events: none; }
+.card.dragging, .card.dragging * { cursor: grabbing !important; }
 
 /* The message sits in a white rounded tile */
 .msg {

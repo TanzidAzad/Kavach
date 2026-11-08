@@ -449,3 +449,32 @@ body.float .qr-box { border-color: rgba(0, 0, 0, 0.08); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Mouse-reactive glass + dragging (floating panel only) ---------- */
+.glow { display: none; }
+body.float .glow {
+  display: block;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  width: 340px;
+  height: 340px;
+  margin: -170px 0 0 -170px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.18) 55%, rgba(255, 255, 255, 0));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+  will-change: transform;
+}
+body.float.hovering .glow { opacity: 1; }
+body.float header, body.float main, body.float footer { position: relative; z-index: 1; }
+body.float .sheet { z-index: 2; }
+body.float .tile { transition: background-color 200ms ease; }
+body.float .tile:hover { background-color: rgba(255, 255, 255, 0.72); }
+
+/* The top bar is the handle: grab cursor, no text selection while dragging */
+body.float header { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+body.float header button, body.float header select { cursor: pointer; }
+body.float.dragging, body.float.dragging * { cursor: grabbing !important; user-select: none; }

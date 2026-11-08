@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- content/extract.test.html — open this file in Chrome (double-click it) and read the results.
+     It builds fake Gmail / Outlook / WhatsApp page markup and checks extractPageText(). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>extractPageText tests</title>
+<style>body{font:14px system-ui;margin:16px} #out{white-space:pre-wrap} .hidden{display:none}</style>
+<script src="extract.js"></script>
+</head>
+<body>
+<div id="out"></div>
+<div id="stage"></div>
+<script>
+const out = document.getElementById("out");
+const stage = document.getElementById("stage");
+let passed = 0, failed = 0;
+function check(ok, line) { ok ? passed++ : failed++; out.textContent += (ok ? "PASS  " : "FAIL  ") + line + "\n"; }
+function run(host, html) {
+  stage.innerHTML = html;
+  getSelection().removeAllRanges();
+  const r = extractPageText(host);
+  stage.innerHTML = "";
+  return r;
+}
+
+// Gmail: an older message hidden in the thread, the open one visible.
+let r = run("mail.google.com", `
+  <div role="main">
+    <h2 class="hP">Your case status update</h2>
+    <div class="a3s aiL hidden">OLD hidden message</div>
+    <div class="a3s aiL">Hello,<br>Please send your card number and CVV today.</div>
+  </div>`);
+check(r.source === "gmail" && r.text.startsWith("Your case status update") && /CVV/.test(r.text) && !/OLD/.test(r.text),
+  "Gmail: subject + visible body, hidden one skipped → " + JSON.stringify(r));
+
+// Gmail inbox (no open email) → falls back to page text.
+r = run("mail.google.com", `<div role="main">Inbox — 3 new</div>`);
+check(r.source === "page", "Gmail inbox list falls back to page → " + r.source);
+
+// Outlook
+r = run("outlook.live.com", `
+  <div id="ReadingPaneContainerId">
+    <div role="heading" aria-level="2">IRS refund notice</div>
+    <div aria-label="Message body">Reply with your bank account number.</div>
+  </div>`);
+check(r.source === "outlook" && r.text === "IRS refund notice\n\nReply with your bank account number.",
+  "Outlook: subject + body → " + JSON.stringify(r));
+
+// WhatsApp: 12 incoming + 1 outgoing; keep the last 10 incoming only.
+let bubbles = "";
+for (let i = 1; i <= 12; i++) {
+  bubbles += `<div class="message-in"><div data-pre-plain-text="[10:${i}] Bob: "><span class="selectable-text">msg ${i}</span></div></div>`;
+}
+bubbles += `<div class="message-out"><div data-pre-plain-text="[10:59] Me: "><span class="selectable-text">my reply</span></div></div>`;
+r = run("web.whatsapp.com", `<div id="main">${bubbles}</div>`);
+const lines = r.text.split("\n");
+check(r.source === "whatsapp" && lines.length === 10 && lines[0] === "msg 3" && lines[9] === "msg 12" && !/my reply/.test(r.text),
+  "WhatsApp: last 10 incoming messages → " + JSON.stringify(r));
+
+// Other site: selection wins over page text.
+stage.innerHTML = `<main>Big page text</main><p id="sel">Pay with gift cards</p>`;
+const range = document.createRange(); range.selectNodeContents(document.getElementById("sel"));
+getSelection().removeAllRanges(); getSelection().addRange(range);
+r = extractPageText("example.com");
+check(r.source === "selection" && r.text === "Pay with gift cards", "Other site: selection → " + JSON.stringify(r));
+getSelection().removeAllRanges(); stage.innerHTML = "";
+
+// Other site: main text, capped at 4000.
+r = run("example.com", `<main>${"word ".repeat(2000)}</main>`);
+check(r.source === "page" && r.text.length === 4000, "Other site: main text capped at 4000 → " + r.text.length);
+
+out.textContent += `\n${passed} passed, ${failed} failed`;
+document.title = failed ? "FAIL" : "PASS";
+</script>
+</body>
+</html>

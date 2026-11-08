@@ -1,5 +1,8 @@
 # Role 3 notes (agent/ + server/) — resume from here
 
+**Demo morning: run `cd server && npm run preflight`** (server running first) — 8 ✅/❌ lines with fixes: Brev health,
+native tool calling, hosted key, vision, server, Spanish text + screenshot Deep Check (<15s), demo_run.json. Exits 1 on any ❌.
+
 ## Done
 - `server/index.js` — proxy (PRD 8.5): POST /api/chat only, logical models `agent` / `vision`, hosted + brev
   backends, Brev health check with hosted fallback, 30s timeout, 10 MB body limit, clean JSON errors.

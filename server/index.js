@@ -227,7 +227,93 @@ app.post("/api/chat", async (req, res) => {
   console.log(`${logical} ${used} ${status} ${Date.now() - t0}ms${note}`);
 });
 
-// Anything else: no other endpoints (PRD 8.5).
+// ---- POST /api/voice/token — Gemini Live ephemeral token ---------------------
+// The extension never sees GEMINI_API_KEY. We mint a single-use, short-lived token that is LOCKED to the Live
+// model AND to a system instruction we build here from { verdict, lang, text } (agent/voicePrompt.js): grounded
+// in the verdict, official contact re-checked against data/, message text masked again. The client cannot change
+// the instruction (tested: with an ephemeral token, Live uses the token's setup, not the client's).
+// Never logs content — only language, verdict word, status, ms.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+const GEMINI_LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
+const GEMINI_VOICE = process.env.GEMINI_VOICE || "Sulafat";
+const GEMINI_TOKEN_URL = "https://generativelanguage.googleapis.com/v1beta/auth_tokens";
+const GEMINI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
+const VOICE_TOKEN_TTL_MS = 15 * 60 * 1000; // whole conversation must fit (native audio sessions cap ~15 min anyway)
+const VOICE_CONNECT_TTL_MS = 60 * 1000;    // must open the WebSocket within 1 min
+const VOICE_RATE = { max: 8, windowMs: 60 * 1000 };
+const voiceHits = new Map(); // ip -> [timestamps]
+function redactGemini(s) { s = redact(s); return GEMINI_KEY ? s.split(GEMINI_KEY).join("[REDACTED]") : s; }
+function voiceRateLimited(ip) {
+  const now = Date.now();
+  const hits = (voiceHits.get(ip) || []).filter((t) => now - t < VOICE_RATE.windowMs);
+  hits.push(now);
+  voiceHits.set(ip, hits);
+  if (voiceHits.size > 1000) voiceHits.clear();
+  return hits.length > VOICE_RATE.max;
+}
+let voicePromptMod = null;
+const voicePrompt = () => (voicePromptMod ||= import("../agent/voicePrompt.js"));
+
+app.post("/api/voice/token", async (req, res) => {
+  const t0 = Date.now();
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const lang = typeof body.lang === "string" ? body.lang.slice(0, 12) : "en";
+  const tag = `voice ${lang} ${body.verdict && body.verdict.verdict ? String(body.verdict.verdict).slice(0, 12) : "pending"}`;
+  if (!GEMINI_KEY) {
+    console.log(`${tag} 503 no key`);
+    return res.status(503).json({ error: "voice not configured (GEMINI_API_KEY missing in server/.env)" });
+  }
+  if (voiceRateLimited(req.ip || "?")) {
+    console.log(`${tag} 429`);
+    return res.status(429).json({ error: "too many voice sessions, wait a minute" });
+  }
+  try {
+    const vp = await voicePrompt();
+    const L = vp.voiceLanguage(lang);
+    const instruction = await vp.buildVoiceInstruction({ verdict: body.verdict || null, lang: L.code, text: body.text || "" });
+    const now = Date.now();
+    const upstream = {
+      uses: 1,
+      expireTime: new Date(now + VOICE_TOKEN_TTL_MS).toISOString(),
+      newSessionExpireTime: new Date(now + VOICE_CONNECT_TTL_MS).toISOString(),
+      bidiGenerateContentSetup: {
+        model: "models/" + GEMINI_LIVE_MODEL,
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_VOICE } } },
+        },
+        systemInstruction: { parts: [{ text: instruction }] },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        // Scared / older speakers pause mid-sentence: wait a bit longer before treating silence as "done".
+        realtimeInputConfig: { automaticActivityDetection: { endOfSpeechSensitivity: "END_SENSITIVITY_LOW", silenceDurationMs: 900 } },
+      },
+    };
+    const r = await fetch(GEMINI_TOKEN_URL, {
+      method: "POST",
+      headers: { "x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(upstream),
+      signal: AbortSignal.timeout(8000),
+    });
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { json = null; }
+    if (!r.ok || !json || !json.name) {
+      const msg = json && json.error && json.error.message ? json.error.message : "token request failed";
+      console.log(`${tag} upstream ${r.status} ${Date.now() - t0}ms: ${redactGemini(msg).slice(0, 160)}`);
+      return res.status(502).json({ error: "could not start voice", upstreamStatus: r.status });
+    }
+    res.set("Cache-Control", "no-store");
+    res.json({ token: json.name, model: GEMINI_LIVE_MODEL, wsUrl: GEMINI_WS_URL, lang: L.code, expiresAt: upstream.expireTime });
+    console.log(`${tag} 200 ${Date.now() - t0}ms`);
+  } catch (e) {
+    const timedOut = e && (e.name === "TimeoutError" || e.name === "AbortError");
+    console.log(`${tag} ${timedOut ? 504 : 500} ${Date.now() - t0}ms: ${redactGemini(e && e.message).slice(0, 120)}`);
+    res.status(timedOut ? 504 : 500).json({ error: timedOut ? "voice token timeout" : "voice token error" });
+  }
+});
+
+// Anything else: no other endpoints (PRD 8.5 + /api/voice/token).
 app.use((req, res) => res.status(404).json({ error: "not found" }));
 
 // Bad JSON / body too large → clean JSON, no stack.

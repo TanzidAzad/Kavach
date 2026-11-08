@@ -5,7 +5,12 @@
 
 (() => {
   const ID = "kavach-float-host";
-  if (document.getElementById(ID)) return; // already open: the panel picks up the new check by itself
+  const toggle = window.__kavachToggle === true; // Kavach icon clicked: a second click closes it
+  window.__kavachToggle = false;
+  if (document.getElementById(ID)) {
+    if (toggle) window.__kavachClose?.();
+    return; // already open: the panel picks up a new check by itself
+  }
 
   const panelUrl = chrome.runtime.getURL(`sidepanel/sidepanel.html?float=1&vh=${innerHeight - 24}`);
   const origin = new URL(panelUrl).origin;
@@ -70,6 +75,7 @@
     }
   };
 
+  window.__kavachClose = close;
   addEventListener("keydown", onKey, true);
   addEventListener("mousedown", onOutside, true);
   addEventListener("message", onMessage);

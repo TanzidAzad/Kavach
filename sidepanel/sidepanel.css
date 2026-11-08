@@ -156,7 +156,7 @@ body.panel { display: flex; flex-direction: column; height: 100vh; overflow: hid
 body.panel header { flex: none; }
 body.panel main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
 body.panel .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-body.panel #start-view textarea { flex: 1; min-height: 120px; max-height: 320px; resize: none; }
+body.panel #start-view textarea { flex: none; height: 140px; resize: none; }
 body.panel footer {
   flex: none;
   display: flex;
@@ -345,6 +345,17 @@ body.panel.float { height: auto; overflow: visible; }
 body.float main, body.float .view { flex: none; }
 body.float .thinking { flex: none; min-height: 120px; }
 body.float .details { flex: none; max-height: var(--details-max, 420px); }
-body.float #start-view textarea { flex: none; height: 180px; }
+body.float #start-view textarea { height: 110px; }
 body.float footer { padding-top: 14px; }
 body.float .sheet { position: static; margin: 10px 14px 0; border-radius: var(--tile-radius); box-shadow: none; }
+
+/* ---------- Launcher (start view, also what the Kavach icon opens) ---------- */
+#check-page.big { min-height: 60px; margin-top: 4px; font-size: 19px; }
+.paste-tile { margin-top: 12px; padding: 10px 12px 12px; }
+.paste-tile textarea { padding: 6px 4px; border: none; background: transparent; font-size: 16px; }
+.paste-tile textarea:focus { border: none; background: transparent; }
+.paste-tile .upload-row { margin: 6px 0 0; }
+.paste-tile .note { margin: 8px 2px 0; }
+button.secondary { width: 100%; margin-top: 10px; background: var(--text); color: #fff; }
+button.secondary:hover { background: #3c4043; }
+body.float .paste-tile .upload, body.float .paste-tile .file-info { background: var(--fill); }

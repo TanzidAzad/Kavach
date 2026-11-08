@@ -143,6 +143,10 @@
     root.append(card);
     (document.body || document.documentElement).append(box);
     cardHost = box;
+    // Role 1's background plays a soft ping. try: sendMessage throws if the extension was reloaded.
+    try {
+      chrome.runtime.sendMessage({ type: "KAVACH_CARD_SHOWN" }).catch(() => {});
+    } catch {}
   }
 
   // ---------- Gmail / Outlook / WhatsApp: watch for opened messages ----------

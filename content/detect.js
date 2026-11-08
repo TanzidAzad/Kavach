@@ -4,7 +4,7 @@
 // On Gmail, Outlook web and WhatsApp Web:
 //   When an email / chat is opened, read its text and run Quick Check LOCALLY (nothing is sent anywhere).
 //   If it has 2+ warning signs (Quick Check says "scam"), show a small calm card in the bottom-right:
-//     "This message has signs of a scam. Want me to check it?"  [Check it] [Talk to Kavach]  Not now
+//     ✕ (close, top-left)  "This message has signs of a scam. Want me to check it?"  [Check it] [Talk to Kavach]
 // On any other site:
 //   If the site's own address imitates a real .gov site (checkLookalikeDomain), show the same card.
 //
@@ -42,7 +42,7 @@
     cardWebsite: "This website may be pretending to be a government site. Want me to check it?",
     cardCheckIt: "Check it",
     cardTalk: "Talk to Kavach",
-    cardNotNow: "Not now"
+    cardClose: "Close" // read aloud by screen readers for the ✕ button
   };
 
   async function strings() {
@@ -94,6 +94,23 @@
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-label", "Kavach");
 
+    const button = (label, cls, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      if (cls) b.className = cls;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+
+    // ✕ in the top-left: closes the card; it won't come back for this message / site.
+    const close = button("✕", "close", () => {
+      hideCard();
+      onDone?.();
+    });
+    close.setAttribute("aria-label", s.cardClose);
+    close.title = s.cardClose;
+
     const head = document.createElement("div");
     head.className = "head";
     // Shield logo (Role 1's file, web-accessible in the manifest). If it can't load, just the name shows.
@@ -102,7 +119,7 @@
     logo.src = url("sidepanel/brand/mark-dark.png");
     logo.alt = "";
     logo.addEventListener("error", () => logo.remove());
-    head.append(logo, "Kavach");
+    head.append(close, logo, "Kavach");
 
     const msg = document.createElement("p");
     msg.className = "msg";
@@ -119,14 +136,6 @@
       hideCard();
       onDone?.();
     };
-    const button = (label, cls, onClick) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      if (cls) b.className = cls;
-      b.addEventListener("click", onClick);
-      return b;
-    };
 
     const actions = document.createElement("div");
     actions.className = "actions";
@@ -134,12 +143,7 @@
       button(s.cardCheckIt, "primary", () => send("check")),
       button(s.cardTalk, "", () => send("talk"))
     );
-    const notNow = button(s.cardNotNow, "link", () => {
-      hideCard();
-      onDone?.();
-    });
-
-    card.append(head, msg, actions, notNow);
+    card.append(head, msg, actions);
     root.append(card);
     (document.body || document.documentElement).append(box);
     cardHost = box;
@@ -236,7 +240,7 @@
       if (r.status !== "fail") return;
       const key = "kavach-site-dismissed";
       try {
-        if (sessionStorage.getItem(key)) return; // "Not now" already clicked on this site
+        if (sessionStorage.getItem(key)) return; // card already closed / used on this site
       } catch {}
       const pageText = typeof extractPageText === "function" ? extractPageText().text : "";
       await showCard({

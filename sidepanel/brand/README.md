@@ -1,18 +1,16 @@
-# Kavach logos — use these everywhere
+# Kavach logos in the extension
 
-| File | What it is | Use it for |
+Source of truth: **`kavach-logo-kit/`** (repo root): final logos, colors, SVGs, Devpost thumbnail, backdrop.
+Everything in this folder is copied or cut from that kit. Don't draw or recolor logos anywhere else.
+
+| File here | From the kit | Used for |
 |---|---|---|
-| `logo-header.png` | shield + "kavach", dark ink, transparent | on white: popup, side panel, page cards |
-| `logo-light-transparent.png` | same, bigger | docs, README, anything on a light background |
-| `logo-light.png` | shield + "kavach" on cream (3200×1200) | slides, Devpost, light backgrounds |
-| `logo-dark.png` | shield + "kavach" on black (3200×1200) | slides, video title card, dark backgrounds |
-| `mark-dark.png` | shield only, dark, transparent | small spots on light backgrounds (content-script card) |
-| `mark-cream.png`, `mark-cream-large.png` | shield only, cream, transparent | small spots on dark backgrounds |
-| `app-icon.png` | cream shield on black tile (2400×1600) | Devpost thumbnail / social |
-| `icon16/32/48/128.png` | cream shield on black rounded tile | Chrome toolbar + extensions page (set in manifest.json) |
+| `icon16/32/48/128.png` | `extension-icons/` (as-is) | toolbar + extensions page (manifest.json), tab icon, notification |
+| `logo-header.png` | `logo/kavach-logo-transparent-for-light.png`, trimmed, 96px tall | popup + side panel header (full logo: shield + name) |
+| `mark-dark.png` | `icon/kavach-shield-on-light.png`, trimmed, 128px tall | shield alone on light backgrounds (Role 2's page card) |
+| `mark-cream.png` | `icon/kavach-shield-on-dark.png`, trimmed, 128px tall | shield alone on dark backgrounds |
 
-From a content script (Role 2's card), load the shield with:
-`chrome.runtime.getURL("sidepanel/brand/mark-dark.png")` — already allowed for Gmail, Outlook, WhatsApp Web
-in `manifest.json` → `web_accessible_resources`.
+From a content script: `chrome.runtime.getURL("sidepanel/brand/mark-dark.png")` (allowed on all sites in manifest.json).
 
-Colors in the logo: ink `#111111`, cream `#F5F4EF`, greys `#4B4B4B` / `#CFCFCF`. Don't recolor or stretch it.
+Slides / Devpost / video: use the kit directly: `logo/`, `devpost/kavach-thumbnail-3x2.png`, `backdrop/`.
+Kit rules: full logo wherever there's room; shield alone only in square spots; no recoloring, glows or outlines.

@@ -30,21 +30,27 @@
         width: min(400px, calc(100vw - 24px));
         height: min(320px, calc(100vh - 24px)); /* grows to fit the panel's content */
         max-height: calc(100vh - 24px);
-        transition: height 180ms ease;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 26px;
+        transition: height 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-radius: 28px;
         overflow: hidden;
-        background: rgba(242, 242, 245, 0.82);
-        -webkit-backdrop-filter: blur(28px) saturate(1.6);
-        backdrop-filter: blur(28px) saturate(1.6);
-        box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.35), 0 6px 16px -4px rgba(0, 0, 0, 0.16);
+        /* Liquid glass: see-through, strongly blurred, with a bright top edge */
+        background: rgba(244, 244, 248, 0.5);
+        -webkit-backdrop-filter: blur(36px) saturate(1.9);
+        backdrop-filter: blur(36px) saturate(1.9);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.8),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+          0 24px 60px -12px rgba(0, 0, 0, 0.35),
+          0 6px 16px -4px rgba(0, 0, 0, 0.14);
         transform-origin: top right;
-        animation: kv-open 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform, opacity;
+        animation: kv-open 380ms cubic-bezier(0.34, 1.4, 0.64, 1);
       }
-      .frame.closing { animation: kv-close 160ms ease-in forwards; }
+      .frame.closing { animation: kv-close 180ms cubic-bezier(0.4, 0, 1, 1) forwards; }
       iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: light; }
-      @keyframes kv-open { from { opacity: 0; transform: scale(0.94) translateY(-8px); } }
-      @keyframes kv-close { to { opacity: 0; transform: scale(0.96) translateY(-6px); } }
+      @keyframes kv-open { from { opacity: 0; transform: scale(0.9) translateY(-10px); } 60% { opacity: 1; } }
+      @keyframes kv-close { to { opacity: 0; transform: scale(0.94) translateY(-8px); } }
       @media (prefers-reduced-motion: reduce) { .frame, .frame.closing { animation: none; transition: none; } }
     </style>
     <div class="frame" role="dialog" aria-label="Kavach">
@@ -62,7 +68,7 @@
     removeEventListener("mousedown", onOutside, true);
     removeEventListener("message", onMessage);
     frame.classList.add("closing");
-    setTimeout(() => host.remove(), 170);
+    setTimeout(() => host.remove(), 190);
   }
   const onKey = (e) => { if (e.key === "Escape") close(); };
   const onOutside = (e) => { if (!e.composedPath().includes(host)) close(); };

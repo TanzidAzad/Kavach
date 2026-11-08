@@ -72,7 +72,11 @@ const CASE_WORD_RE =
 // Agency names in English, Spanish, Hindi and Chinese.
 const AGENCY_PATTERNS = {
   USCIS: /uscis|citizenship and immigration|immigration (?:department|office)|servicios? de ciudadan[ií]a|departamento de inmigraci[oó]n|oficina de inmigraci[oó]n|यूएससीआईएस|इमिग्रेशन विभाग|移民局/i,
-  ICE: /\bICE\b|immigration and customs enforcement|inmigraci[oó]n y control de aduanas|आईसीई|移民海关执法局/,
+  // "ICE" in capitals, or lowercase "ice" only near enforcement words (so "ice cream" isn't ICE).
+  ICE: [
+    /\bICE\b|immigration and customs enforcement|inmigraci[oó]n y control de aduanas|आईसीई|移民海关执法局/,
+    /\bice\b(?=\s+(?:agents?|officers?|enforcement|officials?)\b|[^.!?\n]{0,60}\b(?:arrest|deport|detain|detention|bail|warrant|jail|custody))/i
+  ],
   IRS: /\bIRS\b|internal revenue service|servicio de impuestos internos|आईआरएस|国税局/i,
   FTC: /\bFTC\b|federal trade commission|comisi[oó]n federal de comercio|联邦贸易委员会/i,
   SSA: /\bSSA\b|social security|seguro social|सामाजिक सुरक्षा|सोशल सिक्योरिटी|社会安全|社会保障/i,
@@ -112,14 +116,17 @@ const ANY_PAYMENT_RE = new RegExp(
 );
 
 // Returns the name whose pattern appears earliest in the text, or null.
+// A pattern can be one regex or a list of regexes.
 function firstMatch(patterns, text) {
   let best = null;
   let bestIndex = Infinity;
-  for (const [name, re] of Object.entries(patterns)) {
-    const m = re.exec(text);
-    if (m && m.index < bestIndex) {
-      best = name;
-      bestIndex = m.index;
+  for (const [name, value] of Object.entries(patterns)) {
+    for (const re of [].concat(value)) {
+      const m = re.exec(text);
+      if (m && m.index < bestIndex) {
+        best = name;
+        bestIndex = m.index;
+      }
     }
   }
   return best;

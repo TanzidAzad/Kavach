@@ -1,15 +1,15 @@
 {
-  "when": "2026-11-08T04:53:31.554Z",
+  "when": "2026-11-08T06:38:19.534Z",
   "results": [
     {
       "name": "Quick Check (Spanish text)",
       "ok": true,
-      "detail": "SCAM/High, 108ms, 3 reasons, deep button shown"
+      "detail": "SCAM/High, 105ms, 3 reasons, deep button shown"
     },
     {
       "name": "Deep Check (Spanish text)",
       "ok": true,
-      "detail": "SCAM/High, 2691ms, 5 checklist lines (gaps 307/302/307/307ms), status \"\""
+      "detail": "SCAM/High, 2604ms, 5 checklist lines (gaps 301/306/303/302ms), status \"\""
     },
     {
       "name": "Ask family copies text",
@@ -19,17 +19,17 @@
     {
       "name": "Screenshot upload → Deep Check",
       "ok": true,
-      "detail": "SCAM/High, 7053ms, 5 lines, image note shown"
+      "detail": "SCAM/High, 5061ms, 5 lines, image note shown"
     },
     {
       "name": "Language → hi",
       "ok": true,
-      "detail": "translated in 434ms, Translator: available, saved: hi, shows \"● घोटाला आत्मविश्वास: ऊंचा | क्यों:\""
+      "detail": "translated in 335ms, Translator: available, saved: hi, shows \"● घोटाला आत्मविश्वास: ऊंचा | क्यों:\""
     },
     {
       "name": "Language → es",
       "ok": true,
-      "detail": "translated in 414ms, Translator: available, saved: es, shows \"● Estafa Confianza: Elevado | porque:\""
+      "detail": "translated in 334ms, Translator: available, saved: es, shows \"● Estafa Confianza: Elevado | porque:\""
     },
     {
       "name": "Server stopped → Deep check needs internet",
@@ -48,7 +48,7 @@
     }
   ],
   "console": [
-    "info: [Kavach translate] en → hi: downloadable",
+    "info: [Kavach translate] en → hi: available",
     "info: [Kavach translate] downloading hi: 0%",
     "info: [Kavach translate] downloading hi: 100%",
     "info: [Kavach translate] en → hi: ready",

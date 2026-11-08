@@ -8,6 +8,10 @@ native tool calling, hosted key, vision, server, Spanish text + screenshot Deep 
 After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on the slide. Median 2.9 s, p90 ≤5.3 s, 0 fallbacks.
 
 ## Done
+- 2026-11-08 full test run on merged main (Brev): core tests 4/4 · preflight 8/8 · run_deep.mjs 2 32/32 · eval Deep 39/40
+  (miss t-hi-07 unknown link, no agency → safe/unsure) · popup_e2e 9/9 (Hindi reasons now translate as full sentences).
+  Fixed: preflight "real number" check now skips verdict.officialContact (the official USCIS phone from data/ is
+  expected there); run_deep cache case compares to the recording's step count instead of a hardcoded 6.
 - 2026-11-07: translation-friendly reasons/steps/familyMessage — prompt + submit_verdict descriptions require one short, complete, literal sentence (subject + verb), no idioms ("create urgency", "red flag", "too good to be true"), no abbreviations except agency names. demo_run.json re-recorded. `run_deep.mjs 2`: ALL PASSED.
 - `server/index.js` — proxy (PRD 8.5): POST /api/chat only, logical models `agent` / `vision`, hosted + brev,
   10 MB body limit, clean JSON errors, `X-Kavach-Backend` response header (`brev` / `hosted` / `hosted fallback`).
@@ -255,7 +259,7 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
 3. `npm run smoke -- brev`, then `npm start`. Log lines show `brev` / `hosted` per request, plus
    `(tool shim)` or `(brev … → hosted)` notes.
 
-## Asks for teammates (current, 2026-11-07, after the merge)
+## Asks for teammates (current, re-checked 2026-11-08 after pulling main)
 - **Role 1 (popup):**
   - After a Deep Check the verdict hides the checklist (`renderVerdict` sets `checklist-block.hidden = true`), so the
     5 live checks — the "agent at work" moment — vanish. Suggest keeping it under the verdict for deep results:
@@ -263,7 +267,7 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
   - First switch to a language downloads the translation model (Hindi: minutes on a fresh profile); the popup stays
     English with no hint. When `prepareTranslation()` returns `"downloading"`, show e.g. "Downloading Hindi… (first time only)".
   - Machine-translated labels are off: "Why:" → es "porque:", "Call" → hi "बुलावा" (= summons), "← New check" →
-    hi "नया चेक" (arrow lost). Use per-language labels from ui_strings.json first (see Role 4), translate() only as fallback.
+    hi "नया चेक" (arrow lost), "Confidence: High" → hi "आत्मविश्वास: ऊंचा" (= self-confidence: tall), es "Confianza: Elevado". Use per-language labels from ui_strings.json first (see Role 4), translate() only as fallback.
   - Optional: `mode: "quick"` results could show `verdict.trace` as the checklist (today: reasons + status line — fine).
 - **Role 2 (core):**
   - `core/tools.js:259` says "(and 1 more warning signs)" → say "1 more warning sign" when the count is 1 (singular), "N more warning signs" otherwise.

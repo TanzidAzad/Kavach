@@ -227,6 +227,90 @@ app.post("/api/chat", async (req, res) => {
   console.log(`${logical} ${used} ${status} ${Date.now() - t0}ms${note}`);
 });
 
+// ---- POST /api/screen — fast yes/no screen for every opened email/chat ------------
+// Body { text } (already masked on the device, max 4000 chars). One short "agent" call (thinking off, temp 0),
+// same Brev → hosted routing as /api/chat, whole thing capped at 5 s. Answers { verdict, reason } with
+// verdict "scam" | "suspicious" | "safe", or 503 { error: "screen_unavailable" } (the extension then uses
+// Quick Check locally). Log: backend, verdict, ms — never the text.
+const SCREEN_BUDGET_MS = 5000;
+const SCREEN_MAX_CHARS = 4000;
+const SCREEN_VERDICTS = ["scam", "suspicious", "safe"];
+const SCREEN_SYSTEM = [
+  "You screen messages for scams that target immigrants and elderly people.",
+  "Signs of a scam: someone pretending to be a government agency (USCIS, IRS, ICE, SSA, police, courts);",
+  "payment by gift card, crypto, wire transfer, Zelle or cash app; asking for a card number, CVC, SSN,",
+  "password, PIN or a verification code; threats of arrest, deportation or fines; fake or strange links;",
+  "pressure to act right now. Normal personal, work, shopping and real appointment messages are safe.",
+  "Text like [PHONE_1] or [EMAIL_1] is a hidden personal detail, not a sign of anything.",
+  "Answer with ONLY one JSON object, nothing else:",
+  '{"verdict":"scam"|"suspicious"|"safe","reason":"<one short plain English sentence>"}',
+  "The reason must not contain any numbers, phone numbers, links or email addresses.",
+].join(" ");
+
+function parseScreen(json) {
+  const msg = json && json.choices && json.choices[0] && json.choices[0].message;
+  let content = msg && typeof msg.content === "string" ? msg.content : "";
+  content = content.replace(/<think>[\s\S]*?<\/think>/g, "");
+  const m = content.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let obj;
+  try { obj = JSON.parse(m[0]); } catch { return null; }
+  const verdict = String(obj && obj.verdict || "").toLowerCase().trim();
+  if (!SCREEN_VERDICTS.includes(verdict)) return null;
+  let reason = typeof obj.reason === "string" ? obj.reason : "";
+  // No numbers / links / emails in the reason, ever. If the model slipped one in, use a plain default.
+  reason = reason.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!reason || /\d|https?:|www\.|@|\.(com|gov|org|net)\b/i.test(reason)) {
+    reason = verdict === "safe" ? "This message does not show common scam signs."
+      : verdict === "scam" ? "This message shows common scam signs." : "This message has some signs that need a closer look.";
+  }
+  return { verdict, reason };
+}
+
+app.post("/api/screen", async (req, res) => {
+  const t0 = Date.now();
+  const deadline = t0 + SCREEN_BUDGET_MS;
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const text = typeof body.text === "string" ? body.text.trim().slice(0, SCREEN_MAX_CHARS) : "";
+  if (!text) {
+    console.log(`screen - 400 ${Date.now() - t0}ms`);
+    return res.status(400).json({ error: "text required" });
+  }
+  let used = "none";
+  try {
+    const list = await routes("agent");
+    for (let i = 0; i < list.length; i++) {
+      const rt = list[i];
+      const left = deadline - Date.now();
+      if (left < 300) break;
+      used = rt.backend + (i > 0 ? " fallback" : "");
+      const upstreamBody = {
+        model: MODELS[rt.backend].agent,
+        messages: [{ role: "system", content: SCREEN_SYSTEM }, { role: "user", content: "Message:\n\"\"\"\n" + text + "\n\"\"\"" }],
+        temperature: 0,
+        max_tokens: 120,
+        stream: false,
+        chat_template_kwargs: { enable_thinking: false },
+      };
+      try {
+        // Brev gets at most 3.5 s of the budget so hosted still has time if it hangs.
+        const budget = rt.backend === "brev" && i < list.length - 1 ? Math.min(left, 3500) : left;
+        const r = await attempt(rt, upstreamBody, budget);
+        const out = r.ok ? parseScreen(r.json) : null;
+        if (out) {
+          res.json(out);
+          return console.log(`screen ${used} ${out.verdict} ${Date.now() - t0}ms`);
+        }
+        if (rt.backend === "brev" && r.status >= 500) markBrevDown("agent");
+      } catch (e) {
+        if (rt.backend === "brev") markBrevDown("agent");
+      }
+    }
+  } catch { /* fall through */ }
+  res.status(503).json({ error: "screen_unavailable" });
+  console.log(`screen ${used} unavailable ${Date.now() - t0}ms`);
+});
+
 // ---- POST /api/voice/token — Gemini Live ephemeral token ---------------------
 // The extension never sees GEMINI_API_KEY. We mint a single-use, short-lived token that is LOCKED to the Live
 // model AND to a system instruction we build here from { verdict, lang, text } (agent/voicePrompt.js): grounded
@@ -313,7 +397,7 @@ app.post("/api/voice/token", async (req, res) => {
   }
 });
 
-// Anything else: no other endpoints (PRD 8.5 + /api/voice/token).
+// Anything else: no other endpoints (PRD 8.5 + /api/screen + /api/voice/token).
 app.use((req, res) => res.status(404).json({ error: "not found" }));
 
 // Bad JSON / body too large → clean JSON, no stack.

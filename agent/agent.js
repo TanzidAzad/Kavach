@@ -24,10 +24,12 @@ export const CONFIG = {
   maxTurns: 6,
   maxInputChars: 4000, // longer messages are cut (keeps the model fast; scams are short)
   visionTimeoutMs: 8000, // screenshot reading gets its own budget inside the 15s
+  visionHedgeMs: 3500, // vision not back by then → send a 2nd identical request, take the first answer
   visionMaxTokens: 1500,
   imageMaxSide: 1280, // screenshots are downscaled in the browser before sending
   imageQuality: 0.85,
   totalTimeoutMs: 15000,
+  cacheMs: 10 * 60 * 1000, // same message again within 10 min → same verdict instantly (0 = off). Off during demo replay.
   perCallTimeoutMs: 6000, // with thinking off a turn is ~0.3–1s; a slow call gets one retry
   maxTokens: 2048, // Nemotron thinks first; thinking counts against max_tokens
   temperature: 0.2,
@@ -43,6 +45,32 @@ const CONFIDENCES = ["high", "medium", "unsure"];
 // ---------- small helpers ----------
 
 class DeadlineError extends Error {}
+
+// ---- tiny in-memory cache (this popup/page only; nothing is stored on disk) ----
+// Key: masked text + a hash of the hidden values (two messages that differ only in the case number
+// must not share a verdict) + a hash of the screenshot, if any.
+const cache = new Map(); // key -> { at, verdict, steps }
+const CACHE_MAX = 20;
+function fnv(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(36);
+}
+function cacheKey(text, imageDataUrl) {
+  const { masked, map } = mask(text);
+  return `${masked}\u0000${fnv(JSON.stringify(map ?? {}))}\u0000${imageDataUrl ? fnv(imageDataUrl) + imageDataUrl.length : ""}`;
+}
+function cacheGet(key) {
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CONFIG.cacheMs) return void cache.delete(key);
+  return hit;
+}
+function cachePut(key, verdict, steps) {
+  cache.set(key, { at: Date.now(), verdict: structuredClone(verdict), steps: structuredClone(steps) });
+  while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+}
+export const clearCache = () => cache.clear();
 
 // A bug in our own code must never break the popup (we fall back), but it must not be silent either.
 function reportError(e) {
@@ -367,41 +395,80 @@ async function downscale(dataUrl) {
 // to the vision model and returns the text it reads. Never throws: "" if it failed.
 async function readScreenshot(imageDataUrl, deadline) {
   if (!/^data:image\/[a-z+.-]+;base64,/i.test(String(imageDataUrl))) return "";
+  let url;
   try {
-    const url = await downscale(imageDataUrl);
-    const left = Math.min(CONFIG.visionTimeoutMs, remainingMs(deadline) - 3000);
-    if (left < 1000) return "";
-    const res = await fetch(CONFIG.serverUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: CONFIG.visionModel,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: VISION_PROMPT },
-              { type: "image_url", image_url: { url } }
-            ]
-          }
-        ],
-        max_tokens: CONFIG.visionMaxTokens,
-        temperature: 0,
-        chat_template_kwargs: { enable_thinking: false }
-      }),
-      signal: AbortSignal.timeout(left)
-    });
-    if (!res.ok) return "";
-    const json = await res.json();
-    const content = json?.choices?.[0]?.message?.content;
-    const text = (Array.isArray(content) ? content.map((c) => c?.text ?? "").join("\n") : String(content ?? ""))
-      .replace(/<think>[\s\S]*?<\/think>/g, "")
-      .replace(/^```\w*\n?|```$/g, "")
-      .trim();
-    return text;
+    url = await downscale(imageDataUrl);
   } catch {
     return "";
   }
+  const left = Math.min(CONFIG.visionTimeoutMs, remainingMs(deadline) - 3000);
+  if (left < 1000) return "";
+  // Hosted vision sometimes stalls on one request (seen: 16–30s, then 1.7s for the same image). If the first
+  // call isn't back after visionHedgeMs, send a second identical one and use whichever answers first.
+  // If the first fails outright, the second goes at once (a plain retry).
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), left);
+  const once = () => visionOnce(url, ctl.signal).then((t) => (t ? t : Promise.reject(new Error("empty"))));
+  try {
+    const first = once();
+    const hedge = new Promise((resolve, reject) => {
+      let sent = false;
+      const send = () => { if (!sent && !ctl.signal.aborted) { sent = true; once().then(resolve, reject); } };
+      const h = setTimeout(send, CONFIG.visionHedgeMs);
+      first.then(() => { clearTimeout(h); reject(new Error("not needed")); }, () => { clearTimeout(h); send(); }); // first failed → retry now
+      ctl.signal.addEventListener("abort", () => { clearTimeout(h); reject(new Error("aborted")); });
+    });
+    return await Promise.any([first, hedge]);
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+    ctl.abort(); // cancel the slower request
+  }
+}
+
+async function visionOnce(url, signal) {
+  const res = await fetch(CONFIG.serverUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: CONFIG.visionModel,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: VISION_PROMPT },
+            { type: "image_url", image_url: { url } }
+          ]
+        }
+      ],
+      max_tokens: CONFIG.visionMaxTokens,
+      temperature: 0,
+      chat_template_kwargs: { enable_thinking: false }
+    }),
+    signal
+  });
+  if (!res.ok) return "";
+  const json = await res.json();
+  const content = json?.choices?.[0]?.message?.content;
+  return (Array.isArray(content) ? content.map((c) => c?.text ?? "").join("\n") : String(content ?? ""))
+    .replace(/<think>[\s\S]*?<\/think>/g, "")
+    .replace(/^```\w*\n?|```$/g, "")
+    .trim();
+}
+
+// Screenshot we could not read and nothing typed: say so honestly (never "safe" — we didn't check anything).
+function unreadableScreenshot(trace) {
+  return {
+    verdict: "suspicious",
+    confidence: "unsure",
+    reasons: ["We could not read the text in the screenshot"],
+    steps: ["Paste the message text and check again", "Do not pay or share personal details until you verify"],
+    officialContact: null,
+    trace,
+    mode: "quick",
+    familyMessage: "I got a message and Kavach could not read the screenshot. Can you help me check it before I do anything?"
+  };
 }
 
 // ---------- main ----------
@@ -426,6 +493,13 @@ export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onSt
       const replay = await replayDemo(onStep);
       if (replay) return replay;
     }
+    // Same message again soon → same answer, steps replayed at once (Role 1's fade-in still paces them).
+    const key = CONFIG.cacheMs > 0 ? cacheKey(text, imageDataUrl) : null;
+    const hit = key && cacheGet(key);
+    if (hit) {
+      for (const r of hit.steps) emit(structuredClone(r));
+      return structuredClone(hit.verdict);
+    }
     if (typeof navigator !== "undefined" && navigator.onLine === false) return await quickFallback(text);
     const deadline = t0 + CONFIG.totalTimeoutMs;
     const pre = []; // steps before the agent loop (Read screenshot)
@@ -441,7 +515,7 @@ export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onSt
       text = [read, text].filter((t) => t.trim()).join("\n\n").slice(0, CONFIG.maxInputChars);
     }
 
-    if (!text.trim()) return await quickFallback("");
+    if (!text.trim()) return imageDataUrl ? unreadableScreenshot(pre) : await quickFallback("");
     const verdict = await deepWithTimeout(text, emit, deadline, pre);
     if (verdict.mode === "deep") {
       lastRecording = makeRecording(
@@ -451,6 +525,7 @@ export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onSt
         Date.now() - t0
       );
       if (await flagOn(FLAG_RECORD)) await saveRecording(lastRecording);
+      if (key) cachePut(key, verdict, timed.map((x) => x.result));
     }
     return verdict;
   } catch (e) {

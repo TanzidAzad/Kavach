@@ -65,7 +65,7 @@ const HOSTED_ROUTE = { backend: "hosted", url: HOSTED_URL, headers: () => ({ Aut
 async function routes(logical) {
   const list = [];
   if (BACKEND === "brev" && await brevReady(logical)) {
-    list.push({ backend: "brev", url: BREV_BASE[logical] + "/v1/chat/completions", headers: () => ({}) });
+    list.push({ backend: "brev", url: BREV_BASE[logical] + "/v1/chat/completions", healthUrl: BREV_BASE[logical] + "/v1/health/ready", headers: () => ({}) });
   }
   if (KEY) list.push(HOSTED_ROUTE);
   return list;
@@ -116,18 +116,43 @@ function parseXmlToolCalls(json, tools) {
   return json;
 }
 
-// One upstream attempt. Returns { status, json } or throws (network error / timeout).
+// Watchdog for Brev: if the port-forward/tunnel dies mid-request (connection hangs instead of refusing),
+// a health ping (every 0.5s, 600ms each) fails and we abort → the caller retries hosted in ~1s, not 12s.
+const WATCHDOG_MS = 600;
+const WATCHDOG_EVERY_MS = 500;
+
+// One upstream attempt. Returns { status, json } or throws (network error / timeout / watchdog).
 async function attempt(rt, upstreamBody, timeoutMs) {
-  const r = await fetch(rt.url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", ...rt.headers() },
-    body: JSON.stringify(upstreamBody),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await r.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { json = null; }
-  return { status: r.status, ok: r.ok, json, text };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new DOMException("upstream timeout", "TimeoutError")), timeoutMs);
+  let watch = null;
+  if (rt.healthUrl) {
+    const probe = async () => {
+      try {
+        const h = await fetch(rt.healthUrl, { signal: AbortSignal.timeout(WATCHDOG_MS) });
+        if (!h.ok) throw new Error("health " + h.status);
+      } catch {
+        if (!ctl.signal.aborted) ctl.abort(new Error("brev unreachable (watchdog)"));
+      }
+    };
+    probe();
+    watch = setInterval(probe, WATCHDOG_EVERY_MS);
+  }
+  try {
+    const r = await fetch(rt.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...rt.headers() },
+      body: JSON.stringify(upstreamBody),
+      signal: ctl.signal,
+    });
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { json = null; }
+    return { status: r.status, ok: r.ok, json, text };
+  } finally {
+    clearTimeout(timer);
+    if (watch) clearInterval(watch);
+  }
 }
 
 // ---- app --------------------------------------------------------------------
@@ -190,7 +215,7 @@ app.post("/api/chat", async (req, res) => {
     } catch (e) {
       const timedOut = e && (e.name === "TimeoutError" || e.name === "AbortError");
       if (rt.backend === "brev") markBrevDown(logical);
-      if (!last) { note = ` (brev ${timedOut ? "timeout" : "unreachable"} → hosted)`; continue; }
+      if (!last) { note = ` (brev ${timedOut ? "timeout" : "unreachable"} after ${Date.now() - t0}ms → hosted)`; continue; }
       status = timedOut ? 504 : 502;
       if (!timedOut) console.log("upstream error:", redact(e && e.message).slice(0, 120));
       out = { error: timedOut ? "upstream timeout" : "upstream unreachable" };

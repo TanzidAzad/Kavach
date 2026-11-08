@@ -5,7 +5,7 @@
 //   RECORD=agent/demo_run.json node agent/test/run_deep.mjs 1 es-screenshot   → saves a replay file
 //   THINK=first,later …                                                       → Nemotron thinking on
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { runDeepCheck, CONFIG, getLastRun } from "../agent.js";
+import { runDeepCheck, CONFIG, getLastRun, clearCache } from "../agent.js";
 import { replayDemo } from "../demoReplay.js";
 import { hasUrl, hasPhone, hasPlaceholder, hasDoubledWord, isFirstPerson, sentences } from "../sanitize.js";
 import { TEST_MESSAGES } from "./messages.js";
@@ -17,6 +17,8 @@ if (process.env.THINK !== undefined) {
   CONFIG.thinkFirstTurn = process.env.THINK.includes("first");
   CONFIG.thinkLaterTurns = process.env.THINK.includes("later");
 }
+const CACHE_MS = CONFIG.cacheMs;
+CONFIG.cacheMs = 0; // every round is a real run; the "cache" case below turns it on
 const HERE = new URL(".", import.meta.url);
 const png = (name) => {
   const f = new URL(name, HERE);
@@ -27,7 +29,15 @@ const msg = (id) => TEST_MESSAGES.find((m) => m.id === id);
 // ---------- fake server replies (for cases the real model can't be forced into) ----------
 const reply = (message) => new Response(JSON.stringify({ choices: [{ message }] }), { status: 200 });
 const call = (id, name, args) => ({ id, type: "function", function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) } });
+const isVision = (opts) => String(opts?.body ?? "").includes('"model":"vision"');
+let visionCalls = 0;
+// Hangs until the agent aborts it (like a stalled hosted request).
+const stall = (opts) => new Promise((_, reject) => opts?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
 const MOCKS = {
+  // First vision request stalls; the hedged 2nd request (real server) must answer. Agent calls are real.
+  visionStall: (n, url, opts) => (isVision(opts) && visionCalls++ === 0 ? stall(opts) : null),
+  // Vision always errors → "could not read the screenshot" (never "safe").
+  visionFails: (n, url, opts) => (isVision(opts) ? new Response('{"error":"down"}', { status: 502 }) : null),
   // Model keeps calling tools / talking and never calls submit_verdict.
   neverSubmits: (n) =>
     n % 2 ? reply({ role: "assistant", content: "I think this is a scam." }) : reply({ role: "assistant", content: "", tool_calls: [call(`c${n}`, "find_red_flags", { lang: "es" })] }),
@@ -63,6 +73,8 @@ const CASES = [
   { id: "malformed-args", text: msg("es-uscis-whatsapp").text, expect: "any", mode: "deep", mock: "malformed", secrets: msg("es-uscis-whatsapp").secrets, noTools: ["hack_the_planet"] },
   { id: "es-screenshot", image: png("es-uscis-whatsapp.png"), file: "es-uscis-whatsapp.png", expect: "scam", mode: "deep", minSteps: 4, needsTool: "read_screenshot", secrets: ["EAC2490123456", "555-0187"] },
   { id: "hi-screenshot", image: png("hi-ice-whatsapp.png"), file: "hi-ice-whatsapp.png", expect: "scam", mode: "deep", needsTool: "read_screenshot", secrets: ["972-555-0199"] },
+  { id: "vision-stall", image: png("hi-ice-whatsapp.png"), file: "hi-ice-whatsapp.png", expect: "scam", mode: "deep", mock: "visionStall", needsTool: "read_screenshot", secrets: ["972-555-0199"] },
+  { id: "vision-fails", image: png("hi-ice-whatsapp.png"), file: "hi-ice-whatsapp.png", expect: "suspicious", mode: "quick", mock: "visionFails", needsTool: "read_screenshot", secrets: [] },
   { id: "replay", replay: true, expect: "scam", mode: "deep", minSteps: 4, secrets: [] }
 ];
 
@@ -97,7 +109,7 @@ const CASE_RE = /\b[A-Z]{3}\d{10}\b/;
 const PHONE_RE = /\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/;
 
 const realFetch = globalThis.fetch;
-const defaultServer = CONFIG.serverUrl;
+const defaultServer = process.env.SERVER || CONFIG.serverUrl; // SERVER=http://localhost:8790/api/chat to test another server
 const rows = [];
 let failures = sanitizeFailures ? 1 : 0;
 rows.push({ round: "-", case: "sanitizer unit tests", verdict: "-", conf: "-", steps: "-", ms: "-", mode: "-", result: sanitizeFailures ? "FAIL" : "PASS" });
@@ -120,12 +132,13 @@ for (let round = 1; round <= rounds; round++) {
     globalThis.fetch = async (url, opts = {}) => {
       if (String(url).includes("/api/chat")) {
         bodies.push(String(opts.body ?? ""));
-        if (c.mock) return MOCKS[c.mock](n++);
+        if (c.mock) { const r = await MOCKS[c.mock](n++, url, opts); if (r) return r; }
       }
       return realFetch(url, opts);
     };
 
     console.log(`\n=== round ${round} · ${c.id}`);
+    visionCalls = 0;
     const codeErrors = []; // bugs in our code that runDeepCheck caught and fell back from
     CONFIG.onError = (e) => { if (!/fetch failed|abort|timeout/i.test(String(e && e.message)) || e instanceof ReferenceError) codeErrors.push(e); };
     const t0 = Date.now();
@@ -150,6 +163,7 @@ for (let round = 1; round <= rounds; round++) {
       for (const e of codeErrors) problems.push("CODE ERROR " + (e && e.message));
       if (c.mode && v.mode !== c.mode) problems.push(`mode ${v.mode}≠${c.mode}`);
       if (c.expect === "scam" && v.verdict !== "scam") problems.push("expected scam");
+      if (c.expect === "suspicious" && v.verdict !== "suspicious") problems.push("expected suspicious");
       if (c.expect === "not-scam" && v.verdict === "scam") problems.push("safe came back as scam");
       if (c.minSteps && v.trace.length < c.minSteps) problems.push(`<${c.minSteps} steps`);
       if (c.needsTool && !v.trace.some((r) => r.tool === c.needsTool)) problems.push(`no ${c.needsTool} step`);
@@ -201,6 +215,34 @@ for (let round = 1; round <= rounds; round++) {
   }
 }
 CONFIG.serverUrl = defaultServer;
+globalThis.fetch = realFetch;
+
+// Cache: same message twice → 2nd is instant, identical, steps replayed; other case number → real run;
+// demo replay on → cache not used.
+if (!only || only === "cache") {
+  console.log("\n=== cache");
+  CONFIG.cacheMs = CACHE_MS;
+  clearCache();
+  const es = msg("es-uscis-whatsapp").text;
+  const timeIt = async (input) => { const t0 = Date.now(); const st = []; const v = await runDeepCheck(input, (r) => st.push(r)); return { v, st, ms: Date.now() - t0 }; };
+  const a = await timeIt({ text: es });
+  const b = await timeIt({ text: es });
+  const c = await timeIt({ text: es.replace("EAC2490123456", "EAC2490999999") });
+  globalThis.localStorage = { _: { kavach_demo_replay: "true" }, getItem(k) { return this._[k] ?? null; }, setItem(k, v) { this._[k] = v; }, removeItem(k) { delete this._[k]; } };
+  const d = await timeIt({ text: es });
+  delete globalThis.localStorage;
+  CONFIG.cacheMs = 0;
+  const p = [];
+  if (a.v.mode !== "deep") p.push("1st not deep");
+  if (b.ms > 50) p.push(`2nd took ${b.ms}ms`);
+  if (JSON.stringify(a.v) !== JSON.stringify(b.v)) p.push("2nd verdict differs");
+  if (b.st.length !== a.st.length) p.push(`2nd replayed ${b.st.length}/${a.st.length} steps`);
+  if (c.ms < 300) p.push("other case number was served from cache");
+  if (d.ms < 3000 || d.st.length !== 6) p.push("replay flag on but cache answered");
+  console.log(`  1st ${a.ms}ms · 2nd ${b.ms}ms (${b.st.length} steps) · other case number ${c.ms}ms · replay on ${d.ms}ms`);
+  if (p.length) failures++;
+  rows.push({ round: "-", case: "cache (10 min)", verdict: b.v.verdict, conf: b.v.confidence, steps: b.st.length, ms: `${a.ms}→${b.ms}`, mode: b.v.mode, result: p.length ? "FAIL: " + p.join(", ") : "PASS" });
+}
 
 console.log("\n| round | case | verdict | conf | steps | ms | mode | result |\n|---|---|---|---|---|---|---|---|");
 for (const r of rows) console.log(`| ${r.round} | ${r.case} | ${r.verdict} | ${r.conf} | ${r.steps} | ${r.ms} | ${r.mode} | ${r.result} |`);

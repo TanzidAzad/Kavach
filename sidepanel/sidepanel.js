@@ -294,9 +294,14 @@ async function renderFamilyRow() {
 
 const familyMessage = () => translate(state.verdict?.familyMessage || "", lang());
 
+// Opens mailto: / sms: links. target="_blank" so the link opens OUTSIDE our frame: in the floating
+// panel we are an iframe inside the web page, and an sms:/mailto: link opened inside the iframe
+// shows Chrome's "This content is blocked" page instead of opening Messages / the mail app.
 function openLink(href) {
   const a = document.createElement("a");
   a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
   a.click();
 }
 

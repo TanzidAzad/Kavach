@@ -35,10 +35,17 @@ Kavach is a Chrome extension. Paste a message or upload a screenshot, then tap *
 - **Verified data:** official contacts for USCIS, IRS, ICE, FTC and SSA, plus 20 guidance facts, all copied from .gov pages with source links.
 
 ## Accuracy (be honest)
-We tested Quick Check on 40 messages we wrote ourselves: 20 scam, 8 suspicious, 12 safe, 10 in each language. Many of the scams deliberately avoid the exact phrases our tool looks for.
-- Exactly right: [__/40]. Scams caught: [__/20]. False alarms on safe messages: [__/12].
-- A simple phrase-matching baseline catches 15/20 scams with 0 false alarms, but never identifies a "suspicious" message.
-- This is not real-world data, we didn't use a T-Mobile data set, and Deep Check isn't measured. Reproduce it with `node eval/run_eval.js`.
+We tested on 40 messages we wrote ourselves: 20 scam, 8 suspicious, 12 safe, 10 in each language. Many of the scams deliberately avoid the exact phrases our tool looks for.
+
+| | Exactly right | Scams flagged | Safe messages wrongly flagged |
+|---|---|---|---|
+| **Deep Check** (Nemotron agent), first run before any tuning | **34/40 (85%)** | **20/20** | 2/12 as "suspicious", 0/12 as "scam" |
+| **Quick Check** (offline rules) | 24/40 (60%) | 18/20 | 0/12 |
+| Phrase matching only (baseline) | 19/40 (48%) | 15/20 | 0/12 |
+
+- "Scams flagged" means called scam or suspicious, so the person is warned. Deep Check called all 20 scams an outright "scam".
+- The Deep Check number is from the blind run. After we fixed what it exposed, it scored 40/40 on the same messages, but that's tuned on the test set, so we don't claim it.
+- This is not real-world data, we didn't use a T-Mobile data set, and the set is small: one message moves a column by 5–8 points. Reproduce with `node eval/run_eval.js` (Quick Check) and `node agent/test/eval_deep.mjs` (Deep Check).
 
 ## Challenges we ran into
 [Fill in from the team, e.g. getting the agent to call tools reliably, the Translator API, masking without breaking the checks, finding official phone numbers on sites that block bots.]

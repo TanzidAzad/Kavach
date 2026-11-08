@@ -13,6 +13,7 @@ import {
   searchGuidance,
   matchRedFlags
 } from "./tools.js";
+import { checkSensitiveInfo, findSensitiveRequests } from "./sensitive.js";
 import { loadData } from "./data.js";
 
 const SUPPORTED_LANGS = ["en", "es", "hi", "zh"];
@@ -159,6 +160,7 @@ export function extractDetails(text) {
 
 // Order reasons are shown in (strongest evidence first).
 const REASON_ORDER = [
+  "check_sensitive_info",
   "check_official_contact",
   "check_lookalike_domain",
   "validate_case_number",
@@ -168,15 +170,19 @@ const REASON_ORDER = [
 // Only show a phone number if it's a real one (data may still say "TODO").
 const looksLikePhone = (p) => typeof p === "string" && /\d{3}/.test(p) && !/todo/i.test(p);
 
-function buildSteps(verdict, contact) {
+function buildSteps(verdict, contact, asksPrivate) {
   if (verdict === "safe") {
     return contact
       ? [`To be sure, check with ${contact.agency} directly at ${contact.url}`]
       : ["If anything feels wrong, ask someone you trust before you act"];
   }
-  const steps = ["Do not pay, reply, or click any links in the message"];
+  const steps = asksPrivate
+    ? ["Do not send your card, bank, or login details, and do not click any links"]
+    : ["Do not pay, reply, or click any links in the message"];
   if (contact) {
     steps.push(`Check with ${contact.agency} yourself at ${contact.url}`);
+  } else if (asksPrivate) {
+    steps.push("If you are worried, call your bank using the number on the back of your card");
   } else {
     steps.push("Contact the agency yourself using its official website, not the message");
   }
@@ -216,6 +222,9 @@ export async function runQuickCheck(text) {
     for (const url of d.urls) trace.push(await checkLookalikeDomain(url));
   }
   trace.push(await findRedFlags(input, lang));
+  // Asking for card / bank / SSN / codes. Each KIND asked for is one warning sign.
+  trace.push(await checkSensitiveInfo(input));
+  const sensitiveSigns = findSensitiveRequests(input).length;
 
   // Guidance query: agency + payment + matched red-flag phrases.
   const flags = await matchRedFlags(input, lang).catch(() => []);
@@ -229,12 +238,13 @@ export async function runQuickCheck(text) {
   //  - guidance doesn't count — it only repeats what the other tools found
   const failedTools = new Set(
     trace
-      .filter((r) => r.status === "fail" && r.tool !== "search_guidance" && r.tool !== "find_red_flags")
+      .filter((r) => r.status === "fail" && !["search_guidance", "find_red_flags", "check_sensitive_info"].includes(r.tool))
       .map((r) => r.tool)
   );
   const redFlagFailed = trace.some((r) => r.tool === "find_red_flags" && r.status === "fail");
   const redFlagSigns = redFlagFailed ? Math.max(1, new Set(flags.map((f) => f.reason)).size) : 0;
-  const fails = failedTools.size + redFlagSigns;
+  // Asking for 1 private detail → at least suspicious; 2+ (e.g. card number + CVC) → scam, even with no agency.
+  const fails = failedTools.size + redFlagSigns + sensitiveSigns;
   const verdict = fails >= 2 ? "scam" : fails === 1 ? "suspicious" : "safe";
   const confidence = fails >= 2 ? "high" : fails === 1 ? "medium" : "unsure"; // never "safe/high"
 
@@ -287,7 +297,7 @@ export async function runQuickCheck(text) {
     verdict,
     confidence,
     reasons,
-    steps: buildSteps(verdict, officialContact),
+    steps: buildSteps(verdict, officialContact, sensitiveSigns > 0),
     officialContact,
     trace,
     mode: "quick",

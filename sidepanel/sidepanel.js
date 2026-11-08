@@ -45,6 +45,7 @@ function showStart(problemKey = null) {
   $("start-view").hidden = false;
   $("result-view").hidden = true;
   $("family-form").hidden = true;
+  closeSendSheet();
   $("again").hidden = true;
   $("problem").hidden = !problemKey;
   if (problemKey) setText($("problem"), t(problemKey));
@@ -56,7 +57,7 @@ function showStart(problemKey = null) {
 function showChecking(headingKey) {
   $("start-view").hidden = true;
   $("result-view").hidden = false;
-  for (const id of ["meter-block", "answer", "details", "more", "again", "family-form"]) $(id).hidden = true;
+  for (const id of ["meter-block", "answer", "details", "more", "again", "family-form", "send-sheet"]) $(id).hidden = true;
   $("thinking").hidden = false;
   setText($("thinking-label"), t(headingKey));
   $("checklist").replaceChildren();
@@ -291,26 +292,114 @@ async function renderFamilyRow() {
   if (fam) $("family-who").textContent = fam.name || fam.email || fam.phone;
 }
 
-async function sendToFamily(fam) {
-  const L = lang();
-  const message = await translate(state.verdict?.familyMessage || "", L);
-  if (fam.phone) {
-    chrome.tabs.create({ url: `https://wa.me/${fam.phone}?text=${encodeURIComponent(message)}` });
-  } else if (fam.email) {
-    const subject = await tr(t("familySubject"), L);
-    const a = document.createElement("a");
-    a.href = `mailto:${encodeURIComponent(fam.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-    a.click();
-  }
+const familyMessage = () => translate(state.verdict?.familyMessage || "", lang());
+
+function openLink(href) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.click();
 }
+
+async function sendWhatsApp(fam) {
+  chrome.tabs.create({ url: `https://wa.me/${fam.phone}?text=${encodeURIComponent(await familyMessage())}` });
+}
+
+async function sendEmail(fam) {
+  const subject = await tr(t("familySubject"), lang());
+  const body = await familyMessage();
+  openLink(`mailto:${encodeURIComponent(fam.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+}
+
+// iMessage: sms: link to a phone (+1 for US numbers) or an Apple ID email.
+// For the QR, letters like Hindi/Chinese stay as they are (UTF-8) and only spaces/symbols are %-encoded:
+// that keeps the code ~3x smaller, so it stays easy to scan. The Mac link is fully encoded.
+const QR_MAX_BYTES = 480;
+const qrBody = (t) => t.replace(/[%&#?+=\s\u0000-\u001f]/g, (ch) => encodeURIComponent(ch));
+const bytes = (str) => new TextEncoder().encode(str).length;
+function smsLink(fam, message) {
+  const to = fam.phone ? `+${fam.phone}` : fam.email;
+  const qr = (text) => `sms:${to}?&body=${qrBody(text)}`;
+  let text = message;
+  while (bytes(qr(text)) > QR_MAX_BYTES && text.length > 20) text = text.slice(0, Math.floor(text.length * 0.9)).trimEnd() + "…";
+  return { full: `sms:${to}?&body=${encodeURIComponent(message)}`, qr: qr(text) };
+}
+const isMac = () => /mac/i.test(navigator.userAgentData?.platform || navigator.platform || "");
+
+async function sendIMessage(fam) {
+  const message = await familyMessage();
+  const link = smsLink(fam, message);
+  if (isMac()) {
+    openLink(link.full); // Messages opens with the text filled in
+    closeSendSheet();
+    setStatus(t("openingMessages"), { flash: true });
+    return;
+  }
+  // Windows etc.: scan the QR with an iPhone. Also copy the message so it can be pasted anywhere.
+  try { await navigator.clipboard.writeText(message); } catch {}
+  drawQr($("qr-box"), link.qr);
+  $("send-choices").hidden = true;
+  $("send-qr").hidden = false;
+}
+
+// QR as an SVG, drawn from the bundled qrcode-generator (window.qrcode). Made on this computer.
+function drawQr(box, text) {
+  box.replaceChildren();
+  if (typeof window.qrcode !== "function") return;
+  window.qrcode.stringToBytes = window.qrcode.stringToBytesFuncs["UTF-8"]; // Hindi / Chinese
+  const qr = window.qrcode(0, "L"); // "L" holds the most text in the fewest squares
+  qr.addData(text, "Byte");
+  qr.make();
+  const n = qr.getModuleCount();
+  const pad = 4;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${n + pad * 2} ${n + pad * 2}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "QR code");
+  svg.setAttribute("shape-rendering", "crispEdges");
+  let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + pad} ${r + pad}h1v1h-1z`;
+  const bg = document.createElementNS(NS, "rect");
+  bg.setAttribute("width", "100%");
+  bg.setAttribute("height", "100%");
+  bg.setAttribute("fill", "#fff");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("fill", "#000");
+  svg.append(bg, path);
+  box.append(svg);
+}
+
+// The "How should we send it?" sheet
+let sendingTo = null;
+function openSendSheet(fam) {
+  sendingTo = fam;
+  $("family-form").hidden = true;
+  $("send-whatsapp").hidden = !fam.phone;
+  $("send-email").hidden = !fam.email;
+  $("send-choices").hidden = false;
+  $("send-qr").hidden = true;
+  $("send-sheet").hidden = false;
+  (fam.phone ? $("send-whatsapp") : $("send-email")).focus();
+}
+function closeSendSheet() {
+  $("send-sheet").hidden = true;
+  $("qr-box").replaceChildren();
+}
+$("send-whatsapp").addEventListener("click", () => { sendWhatsApp(sendingTo); closeSendSheet(); });
+$("send-email").addEventListener("click", () => { sendEmail(sendingTo); closeSendSheet(); });
+$("send-imessage").addEventListener("click", () => sendIMessage(sendingTo));
+$("send-cancel").addEventListener("click", closeSendSheet);
+$("send-done").addEventListener("click", closeSendSheet);
 
 $("family").addEventListener("click", async () => {
   const fam = await getFamily();
-  if (fam) return sendToFamily(fam);
-  openFamilyForm();
+  if (fam) return openSendSheet(fam);
+  openFamilyForm(); // first time: name + phone/email, then the sheet
 });
 
 function openFamilyForm(fam = null) {
+  closeSendSheet();
   $("family-name").value = fam?.name || "";
   $("family-reach").value = fam?.email || (fam?.phone ? "+" + fam.phone : "");
   $("family-form").hidden = false;
@@ -328,7 +417,7 @@ $("family-form").addEventListener("submit", async (e) => {
   try { await chrome.storage.local.set({ familyContact: fam }); } catch {}
   $("family-form").hidden = true;
   renderFamilyRow();
-  sendToFamily(fam);
+  openSendSheet(fam);
 });
 
 // ---------- Report to FTC ----------
@@ -490,6 +579,13 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "KAVACH_READING") showChecking("readingPage");
 });
 
+// Esc closes an open sheet (family form or "How should we send it?"). Returns true if one was open.
+function closeOpenSheet() {
+  if (!$("send-sheet").hidden) { closeSendSheet(); return true; }
+  if (!$("family-form").hidden) { $("family-form").hidden = true; return true; }
+  return false;
+}
+
 // ---------- Floating panel mode (inside float.js's frame on the page) ----------
 
 const FLOAT = new URLSearchParams(location.search).has("float");
@@ -507,6 +603,7 @@ function closeFloat() {
   stopTalking();
   window.parent.postMessage({ kavach: "close" }, "*"); // float.js checks it came from this frame
 }
+if (!FLOAT) addEventListener("keydown", (e) => { if (e.key === "Escape") closeOpenSheet(); });
 if (FLOAT) {
   document.documentElement.classList.add("float");
   document.body.classList.add("float");
@@ -517,8 +614,8 @@ if (FLOAT) {
   new ResizeObserver(report).observe(document.body);
   addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (!$("family-form").hidden) $("family-form").hidden = true; // Esc closes the sheet first
-    else closeFloat();
+    if (closeOpenSheet()) return; // Esc closes a sheet first
+    closeFloat();
   });
 }
 

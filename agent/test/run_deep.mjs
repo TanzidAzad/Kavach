@@ -238,7 +238,8 @@ if (!only || only === "cache") {
   if (JSON.stringify(a.v) !== JSON.stringify(b.v)) p.push("2nd verdict differs");
   if (b.st.length !== a.st.length) p.push(`2nd replayed ${b.st.length}/${a.st.length} steps`);
   if (c.ms < 300) p.push("other case number was served from cache");
-  if (d.ms < 3000 || d.st.length !== 6) p.push("replay flag on but cache answered");
+  const recSteps = JSON.parse(readFileSync(new URL("../demo_run.json", import.meta.url), "utf8")).steps.length;
+  if (d.ms < 3000 || d.st.length !== recSteps) p.push(`replay flag on but cache answered (${d.st.length}/${recSteps} steps)`);
   console.log(`  1st ${a.ms}ms · 2nd ${b.ms}ms (${b.st.length} steps) · other case number ${c.ms}ms · replay on ${d.ms}ms`);
   if (p.length) failures++;
   rows.push({ round: "-", case: "cache (10 min)", verdict: b.v.verdict, conf: b.v.confidence, steps: b.st.length, ms: `${a.ms}→${b.ms}`, mode: b.v.mode, result: p.length ? "FAIL: " + p.join(", ") : "PASS" });

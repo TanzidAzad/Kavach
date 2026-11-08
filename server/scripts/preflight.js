@@ -136,7 +136,8 @@ function checkReplay() {
     const rec = JSON.parse(fs.readFileSync(f, "utf8"));
     const steps = Array.isArray(rec.steps) ? rec.steps.length : 0;
     const v = rec.verdict || {};
-    const leak = /EAC\d{10}|\d{3}-\d{4}/.test(JSON.stringify(rec));
+    // officialContact comes from data/official_contacts.json (a real official number is expected there) — skip it.
+    const leak = /EAC\d{10}|\d{3}-\d{4}/.test(JSON.stringify({ ...rec, verdict: { ...v, officialContact: null } }));
     const ok = steps >= 4 && v.verdict === "scam" && !leak;
     line(ok, "Demo replay file loads (agent/demo_run.json)", `${steps} steps, ${v.verdict}/${v.confidence}, recorded ${String(rec.recordedAt || "?").slice(0, 10)}${leak ? ", CONTAINS A REAL NUMBER" : ""}`,
       "re-record: RECORD=agent/demo_run.json node agent/test/run_deep.mjs 1 es-screenshot");

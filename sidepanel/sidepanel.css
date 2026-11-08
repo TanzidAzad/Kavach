@@ -488,3 +488,16 @@ body.float .lvl-highly_likely .meter [data-step="highly_likely"],
 body.float .lvl-likely .meter [data-step="likely"],
 body.float .lvl-unsure .meter [data-step="unsure"],
 body.float .lvl-unlikely .meter [data-step="unlikely"] { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+
+/* Tell family / Report to FTC: lift, brighten and a springy icon on hover; push in on press */
+.tile-btn { transition: transform 260ms var(--spring), background-color 180ms ease, box-shadow 220ms ease; }
+.tile-btn .ico { transition: transform 300ms var(--spring), background-color 180ms ease; }
+.tile-btn:hover { transform: translateY(-2px); }
+.tile-btn:hover .ico { transform: scale(1.1); background-color: #000; }
+body.float button.tile-btn:hover {
+  background-color: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 0 #fff, 0 8px 20px -8px rgba(0, 0, 0, 0.28), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+body.panel:not(.float) .tile-btn:hover { box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.25); }
+button.tile-btn:active:not(:disabled) { transform: translateY(0) scale(0.96); transition-duration: 90ms; }
+button.tile-btn:active .ico { transform: scale(0.95); }

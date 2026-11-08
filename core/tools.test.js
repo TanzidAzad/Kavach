@@ -62,7 +62,13 @@ await expect("spanish", findRedFlags("Pague en tarjetas de regalo", "es"), "fail
 await expect("wrong lang guess", findRedFlags("Pague en tarjetas de regalo", "en"), "fail");
 await expect("hindi", findRedFlags("गिफ्ट कार्ड से भुगतान करें", "hi"), "fail");
 await expect("chinese", findRedFlags("请用礼品卡付款", "zh"), "fail");
-await expect("english plural", findRedFlags("Buy two GIFT CARDS now", "en"), "fail");
+{
+  const two = await findRedFlags("Pay with a gift card within 24 hours", "en");
+  const ok = /\(and 1 more warning sign\)$/.test(two.detail);
+  ok ? passed++ : failed++;
+  console.log(`${ok ? "PASS" : "FAIL"}  "1 more warning sign" is singular  → ${two.detail}`);
+}
+await expect("english plural",findRedFlags("Buy two GIFT CARDS now", "en"), "fail");
 await expect("no partial word", findRedFlags("We sell giftcardholders", "en"), "pass");
 await expect("clean text",findRedFlags("Your case status was updated.", "en"), "pass");
 

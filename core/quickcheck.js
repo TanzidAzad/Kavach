@@ -156,6 +156,32 @@ export function extractDetails(text) {
   };
 }
 
+// ---------- 2b. Warning sentences ----------
+// Real agency emails and scam-alert newsletters say things like "The IRS will never ask for
+// gift cards" or "Scammers may threaten deportation". Those sentences WARN about scams, so we
+// skip them when looking for payment words and scam phrases (otherwise real IRS emails look like scams).
+// A scam that copies such a sentence is still caught by its other sentences ("pay with gift cards today").
+const WARNING_SENTENCE = [
+  // "<who> will never / does not ask|call|demand…"
+  /\b(?:never|(?:does|do|will|would) not|doesn'?t|don'?t|won'?t)\s+(?:\w+\s+){0,2}?(?:ask|call|demand|request|accept|take|threaten|initiate|contact|email|text|send|require)/i,
+  // advice: "never pay with…", "do not pay by…"
+  /\b(?:never|do not|don'?t)\s+(?:pay|send money|wire|buy)\b/i,
+  // talking ABOUT scammers: "Scammers pretend…", "They might say…"
+  /\b(?:scammers?|fraudsters?|criminals|con artists|they)\s+(?:may|might|could|often|can|will|pretend|claim|say|use|ask|threaten)\b/i,
+  /\b(?:watch out|beware|avoid (?:scams|fraud)|report (?:scams|fraud|it)|scam alert|consumer alert)\b/i,
+  /\bnunca\s+(?:le |les |te )?(?:pedir|pide|solicit|llamar|llama|aceptar|acepta|exigir|exige|amenaz|pague|env[ií]e)|\blos estafadores\b/i,
+  /कभी (?:भी )?नहीं|कभी न|धोखेबाज़|धोखेबाज|ठग/,
+  /绝不会|从不|不会要求|不会.{0,6}(?:要求|打电话|收取)|骗子|诈骗分子|切勿|千万不要/
+];
+
+export function stripWarnings(text) {
+  return String(text ?? "")
+    // split into sentences, and also at ":", ";" and "but" ("never asks for gift cards, but pay…")
+    .split(/(?<=[.!?。！？।\n:;：；])|(?=,?\s+(?:but|pero|however|sin embargo)\b)|(?=[，,]\s*(?:但是|但|可是|लेकिन))/i)
+    .filter((sentence) => !WARNING_SENTENCE.some((re) => re.test(sentence)))
+    .join("");
+}
+
 // ---------- 3 + 4. Run tools, score, build the Verdict ----------
 
 // Order reasons are shown in (strongest evidence first).
@@ -204,7 +230,12 @@ function buildFamilyMessage(verdict, agency) {
 export async function runQuickCheck(text) {
   const input = String(text ?? "").trim();
   const lang = await detectLanguage(input);
-  const d = extractDetails(input);
+  // Agency, links and case number come from the whole message. Payment and channel words
+  // come only from sentences that aren't scam warnings ("IRS will never ask for gift cards").
+  const scored = stripWarnings(input);
+  const full = extractDetails(input);
+  const fromScored = extractDetails(scored);
+  const d = { ...full, channel: fromScored.channel, paymentMethod: fromScored.paymentMethod };
 
   // Run the tools. Order here = order shown in the trace.
   const trace = [];
@@ -221,13 +252,13 @@ export async function runQuickCheck(text) {
   } else {
     for (const url of d.urls) trace.push(await checkLookalikeDomain(url));
   }
-  trace.push(await findRedFlags(input, lang));
+  trace.push(await findRedFlags(scored, lang));
   // Asking for card / bank / SSN / codes. Each KIND asked for is one warning sign.
   trace.push(await checkSensitiveInfo(input));
   const sensitiveSigns = findSensitiveRequests(input).length;
 
   // Guidance query: agency + payment + matched red-flag phrases.
-  const flags = await matchRedFlags(input, lang).catch(() => []);
+  const flags = await matchRedFlags(scored, lang).catch(() => []);
   const query = [d.agency, d.paymentMethod, ...flags.map((f) => f.phrase)].filter(Boolean).join(" ");
   const guidance = await searchGuidance(query);
   trace.push(guidance);

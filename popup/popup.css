@@ -7,3 +7,4 @@ textarea { font-size: 16px; }
 .upload-row { margin: 8px 0 10px; }
 #check-message { width: 100%; }
 .status:empty { display: none; }
+.logo { height: 26px; }

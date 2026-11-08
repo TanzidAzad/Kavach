@@ -30,7 +30,7 @@ header {
   align-items: center;
   padding: 14px 16px 8px;
 }
-.brand { font-size: 18px; font-weight: 700; }
+.logo { display: block; height: 28px; width: auto; } /* brand/logo-header.png: mark + "kavach" */
 
 select {
   appearance: none;

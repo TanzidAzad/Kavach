@@ -8,7 +8,11 @@
   card.style.cssText =
     "position:fixed;right:16px;bottom:16px;z-index:2147483647;padding:12px 14px;border:1px solid #dadce0;" +
     "border-radius:14px;background:#fff;color:#202124;font:16px system-ui,sans-serif;display:flex;gap:8px;align-items:center";
-  card.textContent = "Kavach test card ";
+  const mark = document.createElement("img");
+  mark.src = chrome.runtime.getURL("sidepanel/brand/mark-dark.png"); // the Kavach shield
+  mark.alt = "Kavach";
+  mark.style.cssText = "height:28px;width:auto";
+  card.append(mark);
 
   const make = (text, mode) => {
     const b = document.createElement("button");

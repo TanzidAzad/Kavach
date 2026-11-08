@@ -65,7 +65,7 @@ async function fallback(tabId) {
     }
     chrome.notifications.create("kavach-open", {
       type: "basic",
-      iconUrl: chrome.runtime.getURL("sidepanel/icon128.png"),
+      iconUrl: chrome.runtime.getURL("sidepanel/brand/icon128.png"),
       title: "Kavach",
       message: await label("clickIconToSee", "Click the Kavach icon (top right) to see the check."),
       priority: 2

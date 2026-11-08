@@ -12,6 +12,7 @@ import { runQuickCheck } from "../core/quickcheck.js";
 import { getToolSchemas, TOOL_RUNNERS, PAYMENTS } from "./toolSchemas.js";
 import { SYSTEM_PROMPT, NUDGE_TOOLS, NUDGE_VERDICT, VISION_PROMPT, userMessage } from "./prompts.js";
 import { cleanText, cleanList, pickFamilyMessage, URL_RE } from "./sanitize.js";
+import { flagOn, replayDemo, makeRecording, saveRecording, FLAG_REPLAY, FLAG_RECORD } from "./demoReplay.js";
 
 export { cleanText };
 
@@ -159,8 +160,9 @@ async function runTool(name, args, ctx) {
   }
   if (name === "check_official_contact") ctx.contactArgs.push(args);
   const runner = TOOL_RUNNERS[name];
+  if (!runner) return []; // a tool name the model made up: skip, don't show it
   try {
-    const out = runner ? await runner(args, ctx) : unknownResult(name);
+    const out = await runner(args, ctx);
     const list = (Array.isArray(out) ? out : [out]).filter((r) => r && typeof r === "object" && r.tool);
     return list;
   } catch {
@@ -223,9 +225,14 @@ async function buildVerdict(args, trace, ctx) {
   return { verdict, confidence, reasons, steps, officialContact, trace, mode: "deep", familyMessage };
 }
 
+// Quick Check result, with the same text rules as Deep Check (no links/numbers in reasons/steps;
+// the official link is still shown via officialContact, which comes from data/).
 async function quickFallback(text) {
   try {
-    return await runQuickCheck(text);
+    const v = await runQuickCheck(text);
+    const reasons = cleanList(v.reasons, 3);
+    const steps = cleanList(v.steps, 3);
+    return { ...v, reasons: reasons.length ? reasons : v.reasons, steps: steps.length ? steps : v.steps };
   } catch {
     return {
       verdict: "suspicious",
@@ -366,16 +373,28 @@ async function readScreenshot(imageDataUrl, deadline) {
 
 // ---------- main ----------
 
+// The last successful deep run as a recording (see demoReplay.js). Used by the Node harness.
+let lastRecording = null;
+export const getLastRun = () => lastRecording;
+
 export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onStep = () => {}) {
   text = String(text ?? "").slice(0, CONFIG.maxInputChars);
+  const t0 = Date.now();
+  const timed = []; // [{ t, result }] — what the user saw, when
   const emit = (r) => {
+    timed.push({ t: Date.now() - t0, result: r });
     try {
       onStep(r);
     } catch {}
   };
   try {
+    // Stage safety net: replay a recorded run instead of calling the network.
+    if (await flagOn(FLAG_REPLAY)) {
+      const replay = await replayDemo(onStep);
+      if (replay) return replay;
+    }
     if (typeof navigator !== "undefined" && navigator.onLine === false) return await quickFallback(text);
-    const deadline = Date.now() + CONFIG.totalTimeoutMs;
+    const deadline = t0 + CONFIG.totalTimeoutMs;
     const pre = []; // steps before the agent loop (Read screenshot)
 
     if (imageDataUrl) {
@@ -390,7 +409,17 @@ export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onSt
     }
 
     if (!text.trim()) return await quickFallback("");
-    return await deepWithTimeout(text, onStep, deadline, pre);
+    const verdict = await deepWithTimeout(text, emit, deadline, pre);
+    if (verdict.mode === "deep") {
+      lastRecording = makeRecording(
+        { kind: imageDataUrl ? "screenshot" : "text", preview: mask(text).masked },
+        timed,
+        verdict,
+        Date.now() - t0
+      );
+      if (await flagOn(FLAG_RECORD)) await saveRecording(lastRecording);
+    }
+    return verdict;
   } catch {
     return quickFallback(text);
   }

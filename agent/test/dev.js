@@ -1,6 +1,7 @@
 // agent/test/dev.js — runs Deep Check inside Chrome so you can watch steps appear.
 // Open chrome-extension://<extension id>/agent/test/dev.html
 import { runDeepCheck } from "../agent.js";
+import { getLastRecording } from "../demoReplay.js";
 import { runQuickCheck } from "../../core/quickcheck.js";
 import { TEST_MESSAGES } from "./messages.js";
 
@@ -48,3 +49,13 @@ async function run(kind) {
 
 $("deep").onclick = () => run("deep");
 $("quick").onclick = () => run("quick");
+
+// Saves the last recorded run (needs the "kavach_record" flag on — see agent/NOTES.md).
+$("dlrec").onclick = async () => {
+  const rec = await getLastRecording();
+  if (!rec) return void ($("status").textContent = "No recording yet — turn on kavach_record and run a Deep Check.");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rec, null, 2)], { type: "application/json" }));
+  a.download = "demo_run.json";
+  a.click();
+};

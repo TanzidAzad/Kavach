@@ -293,7 +293,7 @@ function kavachHash(str) {
         const { mask } = await load("core/mask.js");
         const { masked } = mask(text);
         const reply = await Promise.race([
-          chrome.runtime.sendMessage({ type: "KAVACH_SCREEN", text: masked.slice(0, 4000) }),
+          chrome.runtime.sendMessage({ type: "KAVACH_SCREEN", text: masked.slice(0, 4000), pageUrl: location.href }),
           new Promise((resolve) => setTimeout(() => resolve(null), SCREEN_TIMEOUT_MS))
         ]);
         if (reply && (FLAGGED.has(reply.verdict) || reply.verdict === "safe")) {
@@ -461,15 +461,41 @@ function kavachHash(str) {
 
   // ---------- start ----------
 
-  if (SITE) {
-    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-    // Gmail changes #inbox/… when you open an email; Back/Forward fires popstate.
-    window.addEventListener("hashchange", schedule);
-    window.addEventListener("popstate", schedule);
-    schedule();
-  } else if (host === "reportfraud.ftc.gov") {
-    fillFtcReport();
-  } else {
-    checkThisSite();
+  // The page the user is ON is a real .gov / .mil (or official) website → never screen it, never show the
+  // card. (Its pages are full of scam words: reportfraud.ftc.gov would look like a scam.) Pasted messages
+  // that only MENTION a .gov site are not affected: this looks at location.hostname only.
+  async function start() {
+    try {
+      const { checkGovSite } = await load("core/govsite.js");
+      const site = await checkGovSite(location.href);
+      if (site.verified) {
+        log("real government website, no auto-check:", site.host);
+        if (host === "reportfraud.ftc.gov") fillFtcReport();
+        return;
+      }
+    } catch (err) {
+      log("government-site check failed", err?.message);
+      if (/\.(gov|mil)\.?$/.test(host)) { // still never flag a .gov / .mil page
+        if (host === "reportfraud.ftc.gov") fillFtcReport();
+        return;
+      }
+    }
+    begin();
   }
+
+  function begin() {
+    if (SITE) {
+      new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+      // Gmail changes #inbox/… when you open an email; Back/Forward fires popstate.
+      window.addEventListener("hashchange", schedule);
+      window.addEventListener("popstate", schedule);
+      schedule();
+    } else if (host === "reportfraud.ftc.gov") {
+      fillFtcReport();
+    } else {
+      checkThisSite();
+    }
+  }
+
+  start();
 })();

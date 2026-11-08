@@ -70,6 +70,14 @@
   "cardNotNow": "Not now",
   "showMore": "Show more",
   "showLess": "Show less",
+  "chooseHowToSend": "How should we send it?",
+  "whatsapp": "WhatsApp",
+  "imessage": "iMessage",
+  "email": "Email",
+  "openingMessages": "Opening Messages…",
+  "scanWithIphone": "Scan with your iPhone camera to send",
+  "copiedCanPaste": "Copied — you can paste it too",
+  "done": "Done",
 
   "es": {
     "appName": "Kavach",
@@ -135,7 +143,15 @@
     "cardTalk": "Hablar con Kavach",
     "cardNotNow": "Ahora no",
     "showMore": "Ver más",
-    "showLess": "Ver menos"
+    "showLess": "Ver menos",
+    "chooseHowToSend": "¿Cómo quiere enviarlo?",
+    "whatsapp": "WhatsApp",
+    "imessage": "iMessage",
+    "email": "Correo electrónico",
+    "openingMessages": "Abriendo Mensajes…",
+    "scanWithIphone": "Escanee con la cámara de su iPhone para enviarlo",
+    "copiedCanPaste": "Copiado — también puede pegarlo",
+    "done": "Listo"
   },
 
   "hi": {
@@ -202,7 +218,15 @@
     "cardTalk": "Kavach से बात करें",
     "cardNotNow": "अभी नहीं",
     "showMore": "और देखें",
-    "showLess": "कम देखें"
+    "showLess": "कम देखें",
+    "chooseHowToSend": "इसे कैसे भेजें?",
+    "whatsapp": "WhatsApp",
+    "imessage": "iMessage",
+    "email": "ईमेल",
+    "openingMessages": "Messages खोल रहे हैं…",
+    "scanWithIphone": "भेजने के लिए अपने iPhone के कैमरे से स्कैन करें",
+    "copiedCanPaste": "कॉपी हो गया — आप इसे पेस्ट भी कर सकते हैं",
+    "done": "हो गया"
   },
 
   "zh": {
@@ -269,6 +293,14 @@
     "cardTalk": "和 Kavach 说话",
     "cardNotNow": "以后再说",
     "showMore": "显示更多",
-    "showLess": "收起"
+    "showLess": "收起",
+    "chooseHowToSend": "您想怎么发送？",
+    "whatsapp": "WhatsApp",
+    "imessage": "iMessage",
+    "email": "电子邮件",
+    "openingMessages": "正在打开“信息”…",
+    "scanWithIphone": "用 iPhone 相机扫一扫即可发送",
+    "copiedCanPaste": "已复制 — 您也可以粘贴",
+    "done": "完成"
   }
 }

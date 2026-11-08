@@ -56,6 +56,7 @@ export const PAYMENTS = {
   wire_transfer: "wire transfer",
   payment_app: "a payment app",
   cash: "cash",
+  other_fee: "", // e.g. a "processing fee" on a website — no payment-method check (none of the above was named)
   none: "",
   unknown: ""
 };
@@ -109,8 +110,23 @@ export const TOOL_RUNNERS = {
   // The model doesn't need to copy the message: ctx.text is the full original (unmasked) text,
   // so the scan never misses words the model shortened or paraphrased.
   find_red_flags: (a, ctx = {}) => findRedFlags(ctx.text || a.text || "", a.lang || "en"),
-  search_guidance: (a) => searchGuidance(a.query ?? "")
+  search_guidance: async (a, ctx = {}) => {
+    const r = await searchGuidance(a.query ?? "");
+    // Guidance about a specific payment method only makes sense if the message names that method
+    // (core matched "USCIS payment" to the gift-card entry for a "processing fee" scam).
+    return r && ctx.text && offTopicPayment(r.detail, ctx.text) ? null : r;
+  }
 };
+
+// Payment words in the guidance text → the same method in the message (en / es / hi / zh).
+const PAYMENT_WORDS = [
+  [/gift ?card/i, /gift ?card|tarjetas? de regalo|google play|itunes|apple card|steam|गिफ्ट|गिफ़्ट|礼品卡|禮品卡/i],
+  [/crypto|bitcoin/i, /crypto|bitcoin|btc|usdt|cripto|बिटकॉइन|क्रिप्टो|比特币|加密货币/i],
+  [/wire transfer/i, /wire|transferencia|western union|moneygram|वायर|电汇|汇款/i]
+];
+function offTopicPayment(detail, text) {
+  return PAYMENT_WORDS.some(([inDetail, inText]) => inDetail.test(String(detail || "")) && !inText.test(text));
+}
 
 const INVESTIGATION_TOOLS = [
   fn(
@@ -123,7 +139,10 @@ const INVESTIGATION_TOOLS = [
         "How the message was sent or asks you to reply. Pick \"unknown\" unless the message itself says it (e.g. mentions WhatsApp).",
         { enum: Object.keys(CHANNELS) }
       ),
-      paymentMethod: str("Payment the message asks for. \"none\" if it asks for no payment.", {
+      paymentMethod: str(
+        "HOW the message asks to be paid. Pick gift_card / crypto / wire_transfer / payment_app / cash ONLY if the message " +
+          "names that method. A fee or payment with no method named (e.g. \"pay the processing fee on this site\") → \"other_fee\". " +
+          "\"none\" if it asks for no payment.", {
         enum: Object.keys(PAYMENTS)
       })
     },

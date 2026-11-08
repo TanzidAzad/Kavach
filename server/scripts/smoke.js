@@ -8,7 +8,9 @@ const MODE = (process.argv[2] || process.env.NIM_BACKEND || "hosted").toLowerCas
 const KEY = process.env.NVIDIA_API_KEY || "";
 const HOSTED = "https://integrate.api.nvidia.com/v1";
 const LLM_BASE = MODE === "brev" ? trimUrl(process.env.BREV_LLM_URL || "http://localhost:8000") + "/v1" : HOSTED;
-const VL_BASE = MODE === "brev" ? trimUrl(process.env.BREV_VL_URL || "http://localhost:8001") + "/v1" : HOSTED;
+// No VL model on Brev by default: vision is tested on hosted unless BREV_VL_URL is set (same rule as index.js).
+const VL_ON_BREV = MODE === "brev" && !!process.env.BREV_VL_URL;
+const VL_BASE = VL_ON_BREV ? trimUrl(process.env.BREV_VL_URL) + "/v1" : HOSTED;
 const TIMEOUT_MS = 60000;
 
 function trimUrl(u) { return u.replace(/\/+$/, "").replace(/\/v1$/, ""); }
@@ -16,17 +18,18 @@ function redact(s) { s = String(s); return KEY ? s.split(KEY).join("[REDACTED]")
 function short(s, n = 80) { s = redact(s).replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n) + "…" : s; }
 function stripThink(s) { return String(s || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim(); }
 
-function headers() {
+function headers(base) {
   const h = { "Content-Type": "application/json", Accept: "application/json" };
-  if (MODE !== "brev") h.Authorization = "Bearer " + KEY;
+  if (base === HOSTED) h.Authorization = "Bearer " + KEY;
   return h;
 }
+const NO_THINK = { chat_template_kwargs: { enable_thinking: false } }; // what agent.js sends
 
 async function call(base, path, body) {
   const t0 = Date.now();
   const res = await fetch(base + path, {
     method: body ? "POST" : "GET",
-    headers: headers(),
+    headers: headers(base),
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -74,7 +77,7 @@ const HI_SCAM = "यह ICE (इमिग्रेशन विभाग) की
 
 function summaryBody(model, text) {
   return {
-    model, temperature: 0, max_tokens: 1024,
+    model, temperature: 0, max_tokens: 1024, ...NO_THINK,
     messages: [
       { role: "system", content: "/no_think You are a scam analyst. Reply in English with exactly one line, no preamble." },
       { role: "user", content: "Summarize this message in one English sentence and say whether it looks like a scam:\n\n" + text },
@@ -88,7 +91,7 @@ function oneLineEnglish(content) {
 }
 
 async function main() {
-  if (MODE !== "brev" && !KEY) { console.log("NVIDIA_API_KEY missing — copy .env.example to .env"); process.exit(1); }
+  if ((MODE !== "brev" || !VL_ON_BREV) && !KEY) { console.log("NVIDIA_API_KEY missing — copy .env.example to .env"); process.exit(1); }
   console.log(`backend: ${MODE}`);
 
   // a. list models
@@ -96,9 +99,13 @@ async function main() {
   if (!llmList.ok) { console.log(`models list failed: HTTP ${llmList.status} ${short(llmList.text)}`); process.exit(1); }
   let llmIds = (llmList.json.data || []).map((m) => m.id);
   let vlIds = llmIds;
-  if (MODE === "brev") {
-    const vlList = await call(VL_BASE, "/models");
+  if (VL_ON_BREV) {
+    const vlList = await call(VL_BASE, "/models").catch(() => ({ ok: false }));
     vlIds = vlList.ok ? (vlList.json.data || []).map((m) => m.id) : [];
+  } else if (MODE === "brev") {
+    // vision on hosted: just the known hosted VL model
+    vlIds = ["nvidia/nemotron-3.5-super-vl-120b-a12b"];
+    console.log("vision: hosted (no BREV_VL_URL)");
   } else {
     llmIds = llmIds.filter((id) => /nemotron/i.test(id));
     vlIds = llmIds;
@@ -112,7 +119,7 @@ async function main() {
   // Nemotron 3.x first (newest), fast tiers before big ones. Non-matching IDs keep list order at the end.
   const rank = (id) => ([/lightning/, /nano/, /super/, /ultra/].findIndex((r) => r.test(id)) + 5) % 5 + (/nemotron-3/i.test(id) ? 0 : 5);
   const chatCands = (MODE === "brev" ? llmIds : llmIds.filter((id) => !NOT_CHAT.test(id))).sort((a, b) => rank(a) - rank(b));
-  const vlCands = (MODE === "brev" ? vlIds : vlIds.filter(isVl)).sort((a, b) => rank(a) - rank(b));
+  const vlCands = (VL_ON_BREV ? vlIds : vlIds.filter(isVl)).sort((a, b) => rank(a) - rank(b));
 
   const results = [];
   const report = (name, pass, ms, note = "") => {
@@ -124,14 +131,14 @@ async function main() {
   let chatModel = null;
   for (const model of chatCands) {
     const plain = await call(LLM_BASE, "/chat/completions", {
-      model, temperature: 0, max_tokens: 1024,
+      model, temperature: 0, max_tokens: 1024, ...NO_THINK,
       messages: [{ role: "system", content: "/no_think" }, { role: "user", content: "Reply with the single word: pong" }],
     }).catch((e) => ({ ok: false, status: 0, text: e.message, ms: 0 }));
     const plainOk = plain.ok && /pong/i.test(stripThink(plain.json?.choices?.[0]?.message?.content));
     if (!plainOk) { console.log(`  skip ${model}: chat HTTP ${plain.status} ${short(plain.text, 60)}`); continue; }
 
     const tool = await call(LLM_BASE, "/chat/completions", {
-      model, temperature: 0, max_tokens: 1024, tools: [CASE_TOOL], tool_choice: "auto",
+      model, temperature: 0, max_tokens: 1024, tools: [CASE_TOOL], tool_choice: "auto", ...NO_THINK,
       messages: [
         { role: "system", content: "/no_think You are a scam investigator. Use tools when relevant." },
         { role: "user", content: "A message claims my USCIS case number is IOE1234567890. Is that format valid? Use the tool." },
@@ -140,12 +147,21 @@ async function main() {
     const tc = tool.json?.choices?.[0]?.message?.tool_calls?.[0];
     let argsOk = false;
     try { argsOk = tc?.function?.name === "validate_case_number" && typeof JSON.parse(tc.function.arguments).caseNumber === "string"; } catch {}
-    if (!(tool.ok && argsOk)) { console.log(`  skip ${model}: tools HTTP ${tool.status} ${short(tool.text, 60)}`); continue; }
+    if (!(tool.ok && argsOk)) {
+      console.log(`  skip ${model}: tools HTTP ${tool.status} ${short(tool.text, 60)}`);
+      if (/tool-call-parser|auto-tool-choice/i.test(tool.text)) {
+        console.log("  → container has no tool parser. Restart vLLM with: --enable-auto-tool-choice --tool-call-parser qwen3_coder");
+        console.log("    (NIM env: NIM_ENABLE_AUTO_TOOL_CHOICE=1 NIM_TOOL_CALL_PARSER=qwen3_coder). Until then the proxy parses tool calls itself.");
+      }
+      continue;
+    }
 
     chatModel = model;
     console.log(`chat model: ${model}`);
     report("plain chat", true, plain.ms);
-    report("tool call", true, tool.ms, `args=${short(tc.function.arguments, 50)}`);
+    const m = tool.json.choices[0].message;
+    const thought = !!(m.reasoning_content || m.reasoning || /<think>/.test(m.content || ""));
+    report("tool call", true, tool.ms, `args=${short(tc.function.arguments, 50)} thinking=${thought ? "ON (flag ignored?)" : "off"}`);
     break;
   }
   if (!chatModel) { report("plain chat", false, 0, "no candidate worked"); report("tool call", false, 0); }

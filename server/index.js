@@ -26,9 +26,11 @@ const BACKEND = (process.env.NIM_BACKEND || "hosted").toLowerCase() === "brev" ?
 const HOSTED_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const BREV_BASE = {
   agent: trimUrl(process.env.BREV_LLM_URL || "http://localhost:8000"),
-  vision: trimUrl(process.env.BREV_VL_URL || "http://localhost:8001"),
+  // No VL model on Brev by default: vision only tries Brev when BREV_VL_URL is set AND healthy, else hosted.
+  vision: process.env.BREV_VL_URL ? trimUrl(process.env.BREV_VL_URL) : null,
 };
 const UPSTREAM_TIMEOUT_MS = 30000;
+const BREV_TIMEOUT_MS = 12000; // Brev slower than this → give up and try hosted
 const HEALTH_TIMEOUT_MS = 2000;
 const HEALTH_CACHE_MS = 30000;
 
@@ -44,6 +46,7 @@ function redact(s) { s = String(s); return KEY ? s.split(KEY).join("[REDACTED]")
 // ---- Brev health check (cached per logical model) ---------------------------
 const health = {}; // logical -> { ok, at }
 async function brevReady(logical) {
+  if (!BREV_BASE[logical]) return false;
   const cached = health[logical];
   if (cached && Date.now() - cached.at < HEALTH_CACHE_MS) return cached.ok;
   let ok = false;
@@ -54,16 +57,73 @@ async function brevReady(logical) {
   health[logical] = { ok, at: Date.now() };
   return ok;
 }
+function markBrevDown(logical) { health[logical] = { ok: false, at: Date.now() }; }
 
-// Decide where this request goes. Returns { backend, url, headers }.
-async function route(logical) {
-  if (BACKEND === "brev") {
-    if (await brevReady(logical) || !KEY) {
-      return { backend: "brev", url: BREV_BASE[logical] + "/v1/chat/completions", headers: {} };
-    }
-    // Brev is down but we have a key: fall back to hosted.
+const HOSTED_ROUTE = { backend: "hosted", url: HOSTED_URL, headers: () => ({ Authorization: "Bearer " + KEY }) };
+
+// Ordered list of places to try for this request: Brev first (if chosen + healthy), then hosted (if we have a key).
+async function routes(logical) {
+  const list = [];
+  if (BACKEND === "brev" && await brevReady(logical)) {
+    list.push({ backend: "brev", url: BREV_BASE[logical] + "/v1/chat/completions", headers: () => ({}) });
   }
-  return { backend: "hosted", url: HOSTED_URL, headers: { Authorization: "Bearer " + KEY } };
+  if (KEY) list.push(HOSTED_ROUTE);
+  return list;
+}
+
+// ---- Brev without a tool-call parser -----------------------------------------
+// If the vLLM container was started without --enable-auto-tool-choice / --tool-call-parser, it rejects
+// tool_choice:"auto" with HTTP 400. The model still writes calls as text in the qwen3_coder XML format:
+//   <tool_call><function=NAME><parameter=KEY>VALUE</parameter>…</function></tool_call>
+// So we resend with tool_choice:"none" (tools stay in the prompt) and turn that text into tool_calls.
+let brevNoToolParser = false;
+const NO_PARSER_RE = /tool-call-parser|auto-tool-choice/i;
+
+function paramType(tools, fn, key) {
+  const t = (tools || []).find((x) => x && x.function && x.function.name === fn);
+  return t && t.function.parameters && t.function.parameters.properties && t.function.parameters.properties[key]
+    ? t.function.parameters.properties[key].type : "string";
+}
+function parseXmlToolCalls(json, tools) {
+  const msg = json && json.choices && json.choices[0] && json.choices[0].message;
+  if (!msg || typeof msg.content !== "string" || !msg.content.includes("<tool_call>")) return json;
+  const calls = [];
+  const blockRe = /<tool_call>\s*<function=([^>\s]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/g;
+  let m, i = 0;
+  while ((m = blockRe.exec(msg.content))) {
+    const name = m[1].trim();
+    const args = {};
+    const pRe = /<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g;
+    let p;
+    while ((p = pRe.exec(m[2]))) {
+      const key = p[1].trim();
+      const raw = p[2];
+      const type = paramType(tools, name, key);
+      if (type === "string") { args[key] = raw; continue; }
+      try { args[key] = JSON.parse(raw); }
+      catch { args[key] = type === "array" ? raw.split("\n").map((x) => x.trim()).filter(Boolean) : raw; }
+    }
+    calls.push({ id: "call_" + Date.now().toString(36) + "_" + i++, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  }
+  if (!calls.length) return json;
+  const rest = msg.content.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+  json.choices[0].message = { ...msg, content: rest || null, tool_calls: calls };
+  json.choices[0].finish_reason = "tool_calls";
+  return json;
+}
+
+// One upstream attempt. Returns { status, json } or throws (network error / timeout).
+async function attempt(rt, upstreamBody, timeoutMs) {
+  const r = await fetch(rt.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json", ...rt.headers() },
+    body: JSON.stringify(upstreamBody),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await r.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { json = null; }
+  return { status: r.status, ok: r.ok, json, text };
 }
 
 // ---- app --------------------------------------------------------------------
@@ -89,33 +149,48 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: 'model must be "agent" or "vision"' });
   }
 
-  const { backend, url, headers } = await route(logical);
-  const upstreamBody = { ...body, model: MODELS[backend][logical], stream: false };
-  let status = 502;
-  try {
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
-      body: JSON.stringify(upstreamBody),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
-    status = r.status;
-    const text = await r.text();
-    let json;
-    try { json = JSON.parse(text); } catch { json = null; }
-    if (json === null) {
-      status = r.ok ? 502 : r.status;
-      res.status(status).json({ error: "upstream returned non-JSON", upstreamStatus: r.status });
-    } else {
-      res.status(r.status).json(json);
-    }
-  } catch (e) {
-    const timedOut = e && (e.name === "TimeoutError" || e.name === "AbortError");
-    status = timedOut ? 504 : 502;
-    if (!timedOut) console.log("upstream error:", redact(e && e.message).slice(0, 120));
-    res.status(status).json({ error: timedOut ? "upstream timeout" : "upstream unreachable" });
+  const list = await routes(logical);
+  if (!list.length) {
+    console.log(`${logical} none 503 ${Date.now() - t0}ms`);
+    return res.status(503).json({ error: logical === "vision" ? "no vision backend (set NVIDIA_API_KEY)" : "Brev is down and no NVIDIA_API_KEY for hosted fallback" });
   }
-  console.log(`${logical} ${backend} ${status} ${Date.now() - t0}ms`);
+
+  let status = 502, out = { error: "upstream unreachable" }, used = list[0].backend, note = "";
+  for (let i = 0; i < list.length; i++) {
+    const rt = list[i];
+    const last = i === list.length - 1;
+    used = rt.backend;
+    let upstreamBody = { ...body, model: MODELS[rt.backend][logical], stream: false };
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+    const shim = rt.backend === "brev" && hasTools && brevNoToolParser;
+    if (shim) upstreamBody.tool_choice = "none";
+    try {
+      let r = await attempt(rt, upstreamBody, rt.backend === "brev" ? BREV_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS);
+      // First time we learn Brev has no tool parser: remember it and retry this request with the shim.
+      if (rt.backend === "brev" && hasTools && !shim && r.status === 400 && NO_PARSER_RE.test(r.text)) {
+        brevNoToolParser = true;
+        console.log("brev: no tool-call parser on the container → parsing tool calls in the proxy (restart vLLM with --enable-auto-tool-choice --tool-call-parser qwen3_coder)");
+        upstreamBody = { ...upstreamBody, tool_choice: "none" };
+        r = await attempt(rt, upstreamBody, BREV_TIMEOUT_MS);
+      }
+      if (rt.backend === "brev" && (r.status >= 500 || r.json === null) && !last) {
+        markBrevDown(logical); note = ` (brev ${r.status} → hosted)`; continue;
+      }
+      status = r.json === null ? (r.ok ? 502 : r.status) : r.status;
+      out = r.json === null ? { error: "upstream returned non-JSON", upstreamStatus: r.status } : r.json;
+      if (rt.backend === "brev" && brevNoToolParser && hasTools && r.ok) { out = parseXmlToolCalls(out, body.tools); note += " (tool shim)"; }
+      break;
+    } catch (e) {
+      const timedOut = e && (e.name === "TimeoutError" || e.name === "AbortError");
+      if (rt.backend === "brev") markBrevDown(logical);
+      if (!last) { note = ` (brev ${timedOut ? "timeout" : "unreachable"} → hosted)`; continue; }
+      status = timedOut ? 504 : 502;
+      if (!timedOut) console.log("upstream error:", redact(e && e.message).slice(0, 120));
+      out = { error: timedOut ? "upstream timeout" : "upstream unreachable" };
+    }
+  }
+  res.status(status).json(out);
+  console.log(`${logical} ${used} ${status} ${Date.now() - t0}ms${note}`);
 });
 
 // Anything else: no other endpoints (PRD 8.5).
@@ -129,6 +204,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  const where = BACKEND === "brev" ? `brev (agent ${BREV_BASE.agent}, vision ${BREV_BASE.vision})${KEY ? ", hosted fallback on" : ""}` : "hosted";
+  const where = BACKEND === "brev"
+    ? `brev (agent ${BREV_BASE.agent}, vision ${BREV_BASE.vision || "hosted"})${KEY ? ", hosted fallback on" : ", NO hosted fallback (no key)"}`
+    : "hosted";
   console.log(`Kavach proxy on http://localhost:${PORT} → ${where}`);
 });

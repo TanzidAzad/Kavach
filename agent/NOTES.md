@@ -4,6 +4,13 @@
 - `server/index.js` — proxy (PRD 8.5): POST /api/chat only, logical models `agent` / `vision`, hosted + brev
   backends, Brev health check with hosted fallback, 30s timeout, 10 MB body limit, clean JSON errors.
   `server/scripts/smoke.js` proves the models work.
+- **Brev (2026-11-07):** self-hosted NIM (vLLM, int4) `nvidia/nemotron-3.5-lightning` on `localhost:8000` via port-forward.
+  Proxy now: per-request fallback to hosted (Brev unreachable / timeout 12s / 5xx / non-JSON → mark down, retry hosted
+  in the same request); **vision always hosted** unless `BREV_VL_URL` is set and healthy; **tool-call shim** when the
+  container has no tool parser (see Decisions). Smoke tests `enable_thinking:false` and prints the parser fix.
+- Fixed (both backends): Chinese "processing fee" scam was told "USCIS never asks for gift cards". Added `other_fee`
+  payment choice + stricter description; `search_guidance` results naming a payment method the message never
+  mentions (gift card / crypto / wire, en/es/hi/zh words) are hidden.
 - **Deep Check** (`agent/agent.js` → `runDeepCheck({ text, imageDataUrl }, onStep)`), PRD 9 Role 3 tasks 3–6:
   - **Text:** mask → tool loop (max 6 turns, parallel calls, dedupe) → `submit_verdict` → rules enforced in code.
   - **Screenshot:** downscale in the browser (≤1280px, JPEG 0.85) → `vision` model ("transcribe exactly") →
@@ -19,7 +26,8 @@
   `agent/test/make_screenshot.html` (draws fake WhatsApp screenshots → `agent/test/*.png`, both committed).
 
 ## Next
-- Run `npm run smoke -- brev` once Brev NIMs are up; put real Brev model IDs in `BREV_LLM_MODEL` / `BREV_VL_MODEL`.
+- **Restart the Brev container with the tool parser** (Rafid, on the Brev machine) — see "Brev container flags". Then
+  `npm run smoke -- brev` must show `PASS tool call` and the server log stops saying `(tool shim)`.
 - Verify in the real extension popup once Role 1 wires the screenshot upload (works in dev.html + headless Chrome).
 - Re-record `agent/demo_run.json` the night before the demo (see Record below) so it matches final data.
 
@@ -46,6 +54,37 @@ familyMessage first person / ≤3 sentences / no placeholders, no links/phones/d
 never safe+high, safe never has a failed check. Real Chrome (headless, same code as the popup): screenshot sent as
 86 KB JPEG, deep scam/high, 6 steps, 6.0s.
 Occasional hosted latency spike (one call 6–9s): the run still finishes inside 15s (retry or local finish).
+
+## Results Brev vs hosted (2026-11-07, thinking off) — `node agent/test/run_deep.mjs 3`
+Brev = self-hosted NIM, vLLM int4, `nvidia/nemotron-3.5-lightning`, tool calls via proxy shim; vision on hosted.
+| case | hosted verdict | Brev verdict (×3) | hosted ms | Brev ms (3 rounds) | Brev result |
+|---|---|---|---|---|---|
+| es-text | scam/high | scam/high ×3 | 2566–6986 | 2080 · 3845 · 1925 | PASS ×3 |
+| en-irs | scam/high | scam/high ×3 | 2637–4467 | 1629 · 1868 · 1692 | PASS ×3 |
+| hi-ice | scam/high | scam/high ×3 | 2158–4403 | 1733 · 1678 · 1683 | PASS ×3 |
+| zh-lookalike | scam/high·unsure·medium | scam/medium·high·medium | 2736–5764 | 1958 · 1987 · 2093 | PASS ×3 |
+| en-safe | safe/unsure | safe/unsure ×3 | 2918–8760 | 1629 · 1611 · 3729 | PASS ×3 |
+| very-long | scam/high | scam/high ×3 | 3364–3918 | 1960 · 1949 · 2045 | PASS ×3 |
+| es-screenshot | scam/high | scam/high ×3 | 5246–6802 | 6250 · 4382 · 3437 | PASS ×3 |
+| hi-screenshot | scam/high | scam/high ×3 | 4772–6324 | 3002 · 3177 · 4306 | PASS ×3 |
+| empty / server-down / never-submits / malformed-args / replay | same | same | – | ≤6 ms (replay ~6.3s, scripted) | PASS ×3 |
+- **Quality:** int4 gave the same verdict as hosted on every case, every round; reasons and family messages read
+  the same (often word-for-word). No int4 drop found. zh-lookalike confidence wobbles on both backends.
+  The one wrong reason ("gift cards" on the Chinese fee scam) happened on hosted too → our bug, fixed (see Done).
+- **Latency:** Brev ≈1.0s per agent call, very steady (max 995 ms); text Deep Checks 1.6–2.1s vs 2.2–8.8s hosted.
+  Screenshots are dominated by hosted vision (~2.4s avg). 2 model calls per run (checks, then submit_verdict).
+- **Fallback test** (second server on :8788, fake Brev): A) nothing on the Brev port → hosted, 0.35s;
+  B) health OK but chat drops the connection → `(brev unreachable → hosted)` in the same request, 0.35s;
+  C) Brev 503 → `(brev 503 → hosted)`, 1.5s. Later requests skip Brev for 30s (health cache), then re-check.
+
+## Brev container flags (tool calling)
+The container started without a tool parser: `"auto" tool choice requires --enable-auto-tool-choice and
+--tool-call-parser`. Raw output with tools shows the format
+`<tool_call>\n<function=NAME>\n<parameter=KEY>\nVALUE\n</parameter>…</tool_call>` = vLLM's **`qwen3_coder`** parser.
+On restart add (vLLM args): `--enable-auto-tool-choice --tool-call-parser qwen3_coder`.
+NIM-style env vars (if the image takes env, not args — check the image docs): `NIM_ENABLE_AUTO_TOOL_CHOICE=1`,
+`NIM_TOOL_CALL_PARSER=qwen3_coder`. `enable_thinking:false` already works (no reasoning tokens, 3-token "pong").
+Until then the proxy shim handles it (tested 39/39), so this is a nice-to-have, not a blocker.
 
 ## Models
 | Logical | Hosted model ID | Latency |
@@ -81,6 +120,13 @@ Backups: `nemotron-3-ultra-550b` (agent), `nemotron-3-nano-omni-30b-a3b-reasonin
 - Checklist pacing: `onStep` fires once per shown check, as it finishes, in finish order. No fake delays (Role 1 fades in).
 - `agent/package.json` = `{"type":"module"}` so Node loads agent/ as ES modules.
 - Server: logical model names only, `stream: false` forced, Brev health cached 30s, falls back to hosted.
+- **Brev routing:** each request gets a list [Brev if `NIM_BACKEND=brev` and healthy, hosted if key]. Brev network
+  error / 12s timeout / 5xx / non-JSON → mark Brev down 30s and retry hosted in the same request. 4xx is passed through.
+  Vision: Brev only if `BREV_VL_URL` is set (there is no VL NIM on Brev now) — otherwise straight to hosted.
+- **Tool shim:** if Brev answers 400 "tool-call-parser", the proxy remembers it (until restart), resends with
+  `tool_choice:"none"` (vLLM still puts the tools in the prompt) and converts `<tool_call>` XML in `content` into
+  OpenAI `tool_calls` (array/number args JSON-parsed using the request's tool schema). Log lines say `(tool shim)`.
+- `other_fee` payment choice maps to "" (no payment-method line) — for fees with no method named.
 
 ## How to run the server
 ```bash
@@ -125,11 +171,25 @@ Note: replay plays the same Spanish-screenshot run whatever you paste — only u
 the case passes and no real value is in the file). From Chrome: record flag on → run → Download recording →
 replace `agent/demo_run.json`.
 
+## Recommendation: demo on Brev (with hosted fallback on)
+Same verdicts as hosted, 2–4× faster and steadier on text, no shared rate limits, and it shows a self-hosted NIM.
+`NVIDIA_API_KEY` must stay in server/.env so vision and the fallback work. If Brev misbehaves during rehearsal,
+set `NIM_BACKEND=hosted` and restart — nothing else changes.
+
+## Demo-day startup order (Brev)
+1. **Brev instance** up, NIM container running (with the tool-parser flags above if restarted). Wait until ready.
+2. **Port-forward:** `brev port-forward <instance> -p 8000:8000` (LLM on localhost:8000). Check:
+   `curl -s localhost:8000/v1/models` → shows `nvidia/nemotron-3.5-lightning`.
+3. **server/.env:** `NIM_BACKEND=brev`, `BREV_LLM_MODEL=nvidia/nemotron-3.5-lightning`, `NVIDIA_API_KEY` present.
+   Don't set `BREV_VL_URL`. Then `cd server && npm run smoke -- brev` (vision PASS; tool call PASS once flags are on).
+4. **`cd server && npm start`** → `brev (agent http://localhost:8000, vision hosted), hosted fallback on`.
+5. **Health check:** curl above → `choices`; log line `agent brev 200`. Then
+   `node agent/test/run_deep.mjs 1 es-screenshot` → PASS (log: `agent brev`, `vision hosted`).
+6. Continue with the checklist below from step 4.
+Hosted-only: `NIM_BACKEND=hosted` in .env, skip 1–2.
+
 ## Demo-day checklist for Role 3
-1. Model backend — pick one:
-   - Brev: start the NIMs, run `brev port-forward` (LLM → localhost:8000, VL → localhost:8001), `NIM_BACKEND=brev`
-     in server/.env, then `npm run smoke -- brev`.
-   - Or hosted: `NIM_BACKEND=hosted` (or remove the line) in server/.env.
+1. Backend: see "Demo-day startup order" above (Brev) or set `NIM_BACKEND=hosted`.
 2. `cd server && npm start` — log line says which backend.
 3. Health check (curl above) → `choices` JSON. Then `node agent/test/run_deep.mjs 1 es-screenshot` → PASS.
 4. Reload the extension; run the Spanish screenshot once in the popup (warms up the models).
@@ -138,11 +198,11 @@ replace `agent/demo_run.json`.
 6. Wi-Fi-off part of the demo uses Quick Check (popup) — not affected by the server.
 
 ## How to switch to Brev
-1. Start the NIMs on Brev and run `brev port-forward` so LLM is on `localhost:8000` and VL on `localhost:8001`.
-2. In `server/.env`: `NIM_BACKEND=brev` (and `BREV_LLM_URL` / `BREV_VL_URL` if ports differ).
-3. `npm run smoke -- brev` → note the model IDs; set `BREV_LLM_MODEL` / `BREV_VL_MODEL` if they differ.
-4. `npm start`. Log lines show `brev` or `hosted` per request. The `vision` model may stay on hosted if
-   there's no VL NIM on Brev — expected.
+1. Start the LLM NIM on Brev and `brev port-forward` it to `localhost:8000`.
+2. In `server/.env`: `NIM_BACKEND=brev`, `BREV_LLM_MODEL=nvidia/nemotron-3.5-lightning` (`BREV_LLM_URL` if the port differs).
+   Only set `BREV_VL_URL` if a VL NIM is really running on Brev — otherwise vision goes to hosted.
+3. `npm run smoke -- brev`, then `npm start`. Log lines show `brev` / `hosted` per request, plus
+   `(tool shim)` or `(brev … → hosted)` notes.
 
 ## Asks for teammates
 - **Role 1 (popup):**

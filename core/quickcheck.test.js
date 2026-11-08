@@ -74,6 +74,11 @@ for (const s of samples.slice(0, 4)) {
   check(giftCardReasons <= 1, `${s.name}: gift cards mentioned at most once (${giftCardReasons})`);
 }
 check(scam.reasons.includes("The case number is not a real USCIS format"), "case number reason is plain language");
+const iceVenmo = await runQuickCheck("ice will arrest you. send $200 dollars to this venmo account for bail address: ABCXYZ");
+check(iceVenmo.verdict !== "safe", `lowercase "ice will arrest you" + Venmo is flagged (${iceVenmo.verdict})`);
+check(extractDetails("Ice agents are at your door").agency === "ICE", "'Ice agents' is ICE");
+check(extractDetails("Want some ice cream after work?").agency === null, "'ice cream' is not ICE");
+check(extractDetails("Put ice on it, the swelling will go down").agency === null, "'put ice on it' is not ICE");
 const safe = await runQuickCheck("hello");
 check(safe.verdict === "safe" && safe.confidence === "unsure", "safe is never 'high' confidence");
 

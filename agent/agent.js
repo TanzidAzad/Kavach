@@ -186,6 +186,19 @@ const THREATS = [
   [/arrest|arrestad|warrant|orden de arresto|गिरफ्तार|逮捕/i, "I'll be arrested"]
 ];
 
+// Asking for money (a fee, any payment) — counted as its own warning sign, even when no method is named.
+const FEE_RE = /\bfees?\b|\bpay(ment)?\b|cuota|tarifa|\bpag(o|ar)\b|शुल्क|भुगतान|फीस|费|支付|付款|缴纳/i;
+
+// Number of independent warning signs: distinct failed checks (official-contact lines count separately),
+// plus a money demand in the message if no failed check already said so.
+function warningSignals(fails, ctx) {
+  const keys = new Set(fails.map((r) => (r.tool === "check_official_contact" ? `${r.tool}:${r.detail}` : r.tool)));
+  const payArg = ctx.contactArgs.some((a) => !["none", "unknown", ""].includes(String(a.paymentMethod ?? "").toLowerCase()));
+  const payFail = fails.some((r) => /pay|gift|crypto|wire|cash/i.test(String(r.detail)));
+  if (!payFail && (payArg || FEE_RE.test(ctx.text))) keys.add("money_demand");
+  return keys.size;
+}
+
 // Turn the model's submit_verdict args into a Verdict (PRD 8.2), enforcing every rule in code.
 async function buildVerdict(args, trace, ctx) {
   const modelVerdict = VERDICTS.includes(args.verdict) ? args.verdict : "suspicious";
@@ -199,6 +212,8 @@ async function buildVerdict(args, trace, ctx) {
     confidence = new Set(fails.map((r) => r.tool)).size >= 2 ? "medium" : "unsure";
   }
   if (verdict === "safe") confidence = "unsure"; // never safe + high (PRD 13.3); keep it humble
+  // A scam verdict is never "unsure": high when 2+ independent warning signs, else medium.
+  if (verdict === "scam") confidence = warningSignals(fails, ctx) >= 2 ? "high" : "medium";
 
   let reasons = cleanList(args.reasons, 3);
   if (reasons.length === 0) reasons = cleanList(fails.map((r) => r.detail), 3);

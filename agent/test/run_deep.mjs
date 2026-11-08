@@ -88,6 +88,7 @@ function verdictProblems(v) {
   if (hasPlaceholder(f) || hasUrl(f) || hasPhone(f)) p.push("family has placeholder/link/phone");
   if (sentences(f).length > 3) p.push("family >3 sentences");
   if (v.verdict === "safe" && v.confidence === "high") p.push("safe+high");
+  if (v.verdict === "scam" && v.confidence === "unsure") p.push("scam+unsure");
   if (v.verdict === "safe" && (v.trace || []).some((r) => r.status === "fail")) p.push("safe with a failed check");
   return p;
 }

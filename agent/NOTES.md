@@ -126,6 +126,10 @@ Backups: `nemotron-3-ultra-550b` (agent), `nemotron-3-nano-omni-30b-a3b-reasonin
 - If the model skips a check that applies (case number, link, red flags, guidance), it runs locally before returning.
 - `check_official_contact` args are enums (`CHANNELS`, `PAYMENTS` in toolSchemas.js) mapped to core's words.
   `unknown` channel → no channel check. Channel + payment → two lines ("Sender channel", "Payment method").
+- **Scam is never "unsure"** (2026-11-08): `warningSignals()` counts distinct failed checks (each official-contact
+  line separately) + a money/fee demand in the message (`FEE_RE`, en/es/hi/zh, or a paymentMethod arg) → scam is
+  `high` with ≥2, else `medium`. Prompt + schema say the same. zh-lookalike (link + 处理费) now scam/high on Brev;
+  `run_deep.mjs 3` 39/39 PASS, harness asserts no scam+unsure.
 - Safe + any failed check → `suspicious` (medium if ≥2 tools failed, else unsure). Safe → always `unsure`.
 - familyMessage: model's text only if first person, ≤3 sentences, no link/phone/case number/placeholder, and the
   verdict wasn't changed by our rules; otherwise `familyTemplate()` (verdict + agency + payment + threat).

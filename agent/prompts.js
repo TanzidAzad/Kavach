@@ -16,6 +16,7 @@ Rules:
 - In reasons, steps and familyMessage NEVER write links, phone numbers, case numbers, or placeholders. Say "the link", "that phone number", "the case number" instead.
 - Never say "ignore this message". Tell the person to verify through the official channel.
 - Never give "safe" with "high" confidence. If nothing looks wrong, use "safe" with "unsure". If any check failed, do not say "safe".
+- If verdict is "scam", confidence is "high" or "medium", never "unsure". Use "high" when two or more separate checks point to a scam (for example a fake look-alike link AND a demand to pay a fee). Use "medium" when only one does.
 - A normal reminder that asks for no payment, no personal data, and no urgent action is not a scam.
 - reasons and steps: short, plain, simple English (they get translated). Max 3 reasons, max 3 steps.
 - familyMessage: first person, from the person TO a family member, exactly 3 short sentences, no numbers or placeholders: "I got a message that says it's from USCIS asking me to pay with gift cards. Kavach says it looks like a scam. Can you help me check it before I do anything?"`;

@@ -185,7 +185,7 @@ function submitVerdictSchema(agencies) {
       verdict: str("scam = clear scam; suspicious = some warning signs; safe = no warning signs found.", {
         enum: ["scam", "suspicious", "safe"]
       }),
-      confidence: str("How sure you are. Never use high with safe.", { enum: ["high", "medium", "unsure"] }),
+      confidence: str("How sure you are. safe → always unsure. scam → high if 2+ checks failed (e.g. look-alike link + fee demand), else medium; never unsure.", { enum: ["high", "medium", "unsure"] }),
       reasons: {
         type: "array",
         maxItems: 3,

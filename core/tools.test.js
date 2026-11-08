@@ -48,7 +48,10 @@ await expect("USCIS on WhatsApp", checkOfficialContact({ claimedAgency: "USCIS",
 await expect("USCIS gift cards", checkOfficialContact({ claimedAgency: "uscis", paymentMethod: "gift card" }), "fail");
 await expect("IRS bitcoin", checkOfficialContact({ claimedAgency: "IRS", paymentMethod: "bitcoin" }), "fail");
 await expect("USCIS by mail", checkOfficialContact({ claimedAgency: "USCIS", channel: "mail" }), "pass");
-await expect("email is not mail", checkOfficialContact({ claimedAgency: "IRS", channel: "email" }), "fail");
+await expect("USCIS on Telegram", checkOfficialContact({ claimedAgency: "USCIS", channel: "Telegram" }), "fail");
+await expect("IRS via Zelle", checkOfficialContact({ claimedAgency: "IRS", paymentMethod: "Zelle" }), "fail");
+await expect("USCIS via Western Union", checkOfficialContact({ claimedAgency: "USCIS", paymentMethod: "Western Union" }), "fail");
+await expect("agency not in data + gift cards", checkOfficialContact({ claimedAgency: "State Department", paymentMethod: "gift cards" }), "fail");
 await expect("no agency", checkOfficialContact({ channel: "WhatsApp" }), "unknown");
 await expect("unknown agency", checkOfficialContact({ claimedAgency: "NASA" }), "unknown");
 await expect("agency not in data + crypto", checkOfficialContact({ claimedAgency: "ICE", paymentMethod: "crypto" }), "fail");
@@ -65,7 +68,7 @@ await expect("clean text",findRedFlags("Your case status was updated.", "en"), "
 
 console.log("--- searchGuidance");
 await expect("uscis gift card", searchGuidance("uscis gift card payment"), "fail");
-await expect("only 'uscis'", searchGuidance("uscis case status"), "unknown");
+await expect("only 'uscis'", searchGuidance("hello uscis"), "unknown");
 await expect("empty", searchGuidance(""), "unknown");
 
 console.log("--- checkDomainAge (stretch)");

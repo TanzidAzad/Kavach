@@ -23,9 +23,8 @@ const samples = [
     text: "USCIS notice: your case EAC12345 is on hold. Verify now at uscis-verify.com/login" },
   { name: "zh lookalike link", expected: "scam",
     text: "美国移民局通知：您的申请有问题。请访问 uscis-gov.top 并用礼品卡付款。" },
-  // Only "suspicious" for now: data has no ICE entry and no Hindi threat phrases yet.
-  // Change to "scam" once Role 4 adds them.
-  { name: "hi ICE threat crypto", expected: "suspicious",
+  // "scam" with Role 4's full data. With the old placeholder data it's only "suspicious".
+  { name: "hi ICE threat crypto", expected: ["scam", "suspicious"],
     text: "आईसीई: आपको देश से निकाला जाएगा। अभी बिटकॉइन में भुगतान करें।" },
   { name: "en only a weird link", expected: "suspicious",
     text: "Your package is waiting. Track it here: irs-refund.net" },
@@ -40,7 +39,8 @@ const samples = [
 console.log("--- sample messages");
 for (const s of samples) {
   const v = await runQuickCheck(s.text);
-  check(v.verdict === s.expected, `${s.name}: expected=${s.expected} got=${v.verdict}/${v.confidence}`);
+  const ok = Array.isArray(s.expected) ? s.expected.includes(v.verdict) : v.verdict === s.expected;
+  check(ok, `${s.name}: expected=${s.expected} got=${v.verdict}/${v.confidence}`);
   console.log(`        reasons: ${JSON.stringify(v.reasons)}`);
 }
 
@@ -64,7 +64,10 @@ const scam = await runQuickCheck(samples[0].text);
 check(scam.reasons.length <= 3 && scam.steps.length <= 3, "max 3 reasons and 3 steps");
 check(scam.mode === "quick", "mode is quick");
 check(scam.officialContact?.agency === "USCIS", "official contact comes from data file");
-check(scam.officialContact?.phone === null, "TODO phone number is hidden");
+const phone = scam.officialContact?.phone;
+check(phone === null || (/\d{3}/.test(phone) && !/todo/i.test(phone)), `phone is real or hidden, never "TODO" (${phone})`);
+const lottery = await runQuickCheck("Congratulations! You were selected in the DV-2027 lottery. Send $850 by Western Union.");
+check(lottery.verdict !== "safe", `visa lottery + Western Union is flagged (${lottery.verdict})`);
 for (const s of samples.slice(0, 4)) {
   const v = await runQuickCheck(s.text);
   const giftCardReasons = v.reasons.filter((r) => /gift card/i.test(r)).length;

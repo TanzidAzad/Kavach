@@ -138,6 +138,7 @@ app.use((req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Content-Type");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Expose-Headers", "X-Kavach-Backend");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
@@ -195,6 +196,8 @@ app.post("/api/chat", async (req, res) => {
       out = { error: timedOut ? "upstream timeout" : "upstream unreachable" };
     }
   }
+  // Which backend answered, for tests (eval counts fallbacks). No secrets in it.
+  res.set("X-Kavach-Backend", used + (note.includes("→ hosted") ? " fallback" : "") + (note.includes("shim") ? " shim" : ""));
   res.status(status).json(out);
   console.log(`${logical} ${used} ${status} ${Date.now() - t0}ms${note}`);
 });

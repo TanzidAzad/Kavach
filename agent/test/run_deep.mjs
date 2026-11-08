@@ -89,7 +89,7 @@ function verdictProblems(v) {
   if (sentences(f).length > 3) p.push("family >3 sentences");
   if (v.verdict === "safe" && v.confidence === "high") p.push("safe+high");
   if (v.verdict === "scam" && v.confidence === "unsure") p.push("scam+unsure");
-  if (v.verdict === "safe" && (v.trace || []).some((r) => r.status === "fail")) p.push("safe with a failed check");
+  if (v.verdict === "safe" && (v.trace || []).some((r) => r.status === "fail" && r.tool !== "search_guidance")) p.push("safe with a failed check");
   return p;
 }
 
@@ -126,6 +126,8 @@ for (let round = 1; round <= rounds; round++) {
     };
 
     console.log(`\n=== round ${round} · ${c.id}`);
+    const codeErrors = []; // bugs in our code that runDeepCheck caught and fell back from
+    CONFIG.onError = (e) => { if (!/fetch failed|abort|timeout/i.test(String(e && e.message)) || e instanceof ReferenceError) codeErrors.push(e); };
     const t0 = Date.now();
     let v;
     let threw = null;
@@ -145,6 +147,7 @@ for (let round = 1; round <= rounds; round++) {
       console.log(`    steps:   ${JSON.stringify(v.steps)}`);
       console.log(`    family:  ${v.familyMessage}`);
       if (ms > 15500) problems.push("over 15s");
+      for (const e of codeErrors) problems.push("CODE ERROR " + (e && e.message));
       if (c.mode && v.mode !== c.mode) problems.push(`mode ${v.mode}≠${c.mode}`);
       if (c.expect === "scam" && v.verdict !== "scam") problems.push("expected scam");
       if (c.expect === "not-scam" && v.verdict === "scam") problems.push("safe came back as scam");

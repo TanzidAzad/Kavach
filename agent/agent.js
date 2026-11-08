@@ -9,7 +9,7 @@
 import { mask, unmaskArgs } from "../core/mask.js";
 import { loadData } from "../core/data.js";
 import { runQuickCheck } from "../core/quickcheck.js";
-import { getToolSchemas, TOOL_RUNNERS, PAYMENTS } from "./toolSchemas.js";
+import { getToolSchemas, TOOL_RUNNERS, PAYMENTS, MONEY_RE } from "./toolSchemas.js";
 import { SYSTEM_PROMPT, NUDGE_TOOLS, NUDGE_VERDICT, VISION_PROMPT, userMessage } from "./prompts.js";
 import { cleanText, cleanList, pickFamilyMessage, URL_RE } from "./sanitize.js";
 import { flagOn, replayDemo, makeRecording, saveRecording, FLAG_REPLAY, FLAG_RECORD } from "./demoReplay.js";
@@ -43,6 +43,14 @@ const CONFIDENCES = ["high", "medium", "unsure"];
 // ---------- small helpers ----------
 
 class DeadlineError extends Error {}
+
+// A bug in our own code must never break the popup (we fall back), but it must not be silent either.
+function reportError(e) {
+  try {
+    console.warn("[kavach] Deep Check error (fell back):", e && e.message);
+    if (typeof CONFIG.onError === "function") CONFIG.onError(e);
+  } catch {}
+}
 
 function remainingMs(deadline) {
   return deadline - Date.now();
@@ -186,16 +194,14 @@ const THREATS = [
   [/arrest|arrestad|warrant|orden de arresto|गिरफ्तार|逮捕/i, "I'll be arrested"]
 ];
 
-// Asking for money (a fee, any payment) — counted as its own warning sign, even when no method is named.
-const FEE_RE = /\bfees?\b|\bpay(ment)?\b|cuota|tarifa|\bpag(o|ar)\b|शुल्क|भुगतान|फीस|费|支付|付款|缴纳/i;
 
 // Number of independent warning signs: distinct failed checks (official-contact lines count separately),
-// plus a money demand in the message if no failed check already said so.
+// plus a money demand in the message (MONEY_RE) if no failed check already said so.
 function warningSignals(fails, ctx) {
   const keys = new Set(fails.map((r) => (r.tool === "check_official_contact" ? `${r.tool}:${r.detail}` : r.tool)));
   const payArg = ctx.contactArgs.some((a) => !["none", "unknown", ""].includes(String(a.paymentMethod ?? "").toLowerCase()));
   const payFail = fails.some((r) => /pay|gift|crypto|wire|cash/i.test(String(r.detail)));
-  if (!payFail && (payArg || FEE_RE.test(ctx.text))) keys.add("money_demand");
+  if (!payFail && (payArg || MONEY_RE.test(ctx.text))) keys.add("money_demand");
   return keys.size;
 }
 
@@ -206,17 +212,29 @@ async function buildVerdict(args, trace, ctx) {
   let confidence = CONFIDENCES.includes(args.confidence) ? args.confidence : "medium";
 
   // A failed check is a real warning sign: never call that "safe".
-  const fails = trace.filter((r) => r.status === "fail");
+  // Guidance is advice ("USCIS never asks for…"), not evidence about this message: it doesn't count as a failed check.
+  const fails = trace.filter((r) => r.status === "fail" && r.tool !== "search_guidance");
   if (verdict === "safe" && fails.length) {
     verdict = "suspicious";
     confidence = new Set(fails.map((r) => r.tool)).size >= 2 ? "medium" : "unsure";
   }
+  // A threat of arrest / deportation is never "safe", even if every check passed.
+  const threat = (THREATS.find(([re]) => re.test(ctx.text)) || [])[1] || "";
+  if (verdict === "safe" && threat) {
+    verdict = "suspicious";
+    confidence = "unsure";
+  }
   if (verdict === "safe") confidence = "unsure"; // never safe + high (PRD 13.3); keep it humble
-  // A scam verdict is never "unsure": high when 2+ independent warning signs, else medium.
-  if (verdict === "scam") confidence = warningSignals(fails, ctx) >= 2 ? "high" : "medium";
+  // 2+ independent warning signs, at least one a failed check (e.g. look-alike link + fee demand) → scam.
+  // A scam verdict is never "unsure": high with 2+ warning signs, else medium.
+  const signals = warningSignals(fails, ctx);
+  if (verdict === "suspicious" && fails.length && signals >= 2) verdict = "scam";
+  if (verdict === "scam") confidence = signals >= 2 ? "high" : "medium";
 
-  let reasons = cleanList(args.reasons, 3);
+  // If we overruled a "safe", the model's reasons say "nothing wrong" — use what we found instead.
+  let reasons = modelVerdict === "safe" && verdict !== "safe" ? [] : cleanList(args.reasons, 3);
   if (reasons.length === 0) reasons = cleanList(fails.map((r) => r.detail), 3);
+  if (reasons.length === 0 && threat) reasons = ["The message threatens you (arrest or deportation) to make you act fast"];
   if (reasons.length === 0 && verdict === "safe") reasons = ["We did not find common scam warning signs"];
   let steps = cleanList(args.steps, 3);
   if (steps.length === 0) {
@@ -232,7 +250,7 @@ async function buildVerdict(args, trace, ctx) {
     verdict,
     agency: officialContact?.agency || (claimed && claimed.length <= 30 ? claimed : ""),
     payment: payKey ? PAYMENTS[payKey] : "",
-    threat: verdict === "safe" ? "" : (THREATS.find(([re]) => re.test(ctx.text)) || [])[1] || ""
+    threat: verdict === "safe" ? "" : threat
   };
   // If we changed the verdict, the model's family message would say the wrong thing.
   const familyMessage = verdict === modelVerdict ? pickFamilyMessage(args.familyMessage, facts) : pickFamilyMessage("", facts);
@@ -435,7 +453,8 @@ export async function runDeepCheck({ text = "", imageDataUrl = null } = {}, onSt
       if (await flagOn(FLAG_RECORD)) await saveRecording(lastRecording);
     }
     return verdict;
-  } catch {
+  } catch (e) {
+    reportError(e);
     return quickFallback(text);
   }
 }
@@ -449,7 +468,7 @@ async function deepWithTimeout(text, onStep, deadline, pre = []) {
     timer = setTimeout(() => resolve(null), Math.max(0, remainingMs(deadline) - 400));
   });
   try {
-    const result = await Promise.race([deepLoop(text, onStep, deadline, state, run).catch(() => null), timeout]);
+    const result = await Promise.race([deepLoop(text, onStep, deadline, state, run).catch((e) => (reportError(e), null)), timeout]);
     state.done = true;
     if (result) return result;
     if (run.modelOk && run.ctx) return await finishLocally(run, onStep);

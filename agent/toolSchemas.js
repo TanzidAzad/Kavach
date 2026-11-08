@@ -124,7 +124,10 @@ const PAYMENT_WORDS = [
   [/crypto|bitcoin/i, /crypto|bitcoin|btc|usdt|cripto|बिटकॉइन|क्रिप्टो|比特币|加密货币/i],
   [/wire transfer/i, /wire|transferencia|western union|moneygram|वायर|电汇|汇款/i]
 ];
+// Asking for money at all (a fee, a payment, a dollar amount) — en / es / hi / zh.
+export const MONEY_RE = /\bfees?\b|\bpay(ing|ment)?\b|\$\s?\d|cuota|tarifa|\bpag(o|ue|ar)\b|शुल्क|भुगतान|फीस|费|支付|付款|缴纳|美元/i;
 function offTopicPayment(detail, text) {
+  if (/\bpay|\bfee/i.test(String(detail || "")) && !MONEY_RE.test(text)) return true; // payment advice, no money asked
   return PAYMENT_WORDS.some(([inDetail, inText]) => inDetail.test(String(detail || "")) && !inText.test(text));
 }
 

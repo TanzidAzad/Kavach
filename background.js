@@ -12,6 +12,10 @@
 //   { type: "KAVACH_READ_TAB", tabId, url, mode }
 //       From the popup's "Check this page" button. Reads the page with extractPageText()
 //       (content/extract.js), saves the pendingCheck, shows the floating panel. Answers { floated }.
+//   { type: "KAVACH_SCREEN", text }
+//       From content/detect.js for every opened email/chat. text is ALREADY MASKED on the device.
+//       POSTs it to our server's /api/screen (Nemotron, 6 s limit). Answers { verdict, reason } or { error }
+//       (then detect.js uses Quick Check locally).
 //
 // If the floating panel can't be shown and Chrome also refuses the side panel, we fall back to:
 // a "!" badge on the Kavach icon, a notification, and one click on the icon opens the side panel.
@@ -171,6 +175,27 @@ async function playPing() {
   }
 }
 
+// ---------- Screening opened emails/chats (KAVACH_SCREEN) ----------
+
+const SCREEN_URL = "http://localhost:8787/api/screen";
+const SCREEN_TIMEOUT_MS = 6000;
+
+async function screen(text) {
+  try {
+    const r = await fetch(SCREEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: String(text ?? "").slice(0, 4000) }),
+      signal: AbortSignal.timeout(SCREEN_TIMEOUT_MS)
+    });
+    const json = await r.json().catch(() => null);
+    if (r.ok && json && typeof json.verdict === "string") return { verdict: json.verdict, reason: String(json.reason || "") };
+    return { error: json?.error || "screen_unavailable" };
+  } catch (err) {
+    return { error: err?.name === "TimeoutError" ? "timeout" : "unreachable" };
+  }
+}
+
 // ---------- Messages ----------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -199,6 +224,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, floated });
       });
     return true; // we answer later
+  }
+
+  if (msg?.type === "KAVACH_SCREEN") {
+    screen(msg.text).then(sendResponse);
+    return true;
   }
 
   if (msg?.type === "KAVACH_CARD_SHOWN") {

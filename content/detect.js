@@ -2,15 +2,67 @@
 // Runs inside web pages (content script). Needs content/extract.js loaded first (same "js" list).
 //
 // On Gmail, Outlook web and WhatsApp Web:
-//   When an email / chat is opened, read its text and run Quick Check LOCALLY (nothing is sent anywhere).
-//   If it has 2+ warning signs (Quick Check says "scam"), show a small calm card in the bottom-right:
+//   EVERY time an email / chat is opened, read its text, hide personal details ON THE DEVICE (core/mask.js),
+//   and ask our server to screen it with Nemotron (background.js → POST /api/screen, { type: "KAVACH_SCREEN" }).
+//   If Nemotron says "scam" or "suspicious", show a small calm card in the bottom-right:
 //     ✕ (close, top-left)  "This message has signs of a scam. Want me to check it?"  [Check it] [Talk to Kavach]
+//   No answer in 6 s / server down / offline → Quick Check runs locally instead (card on 1+ warning signs).
+//   The card comes back every time the message is opened again. ✕ / Check it / Talk hide it only while
+//   that same message stays open. Results are remembered per message for this page session, so reopening
+//   shows the card instantly. Gmail loads long emails in pieces: if the text grows by >20%, we check again.
 // On any other site:
 //   If the site's own address imitates a real .gov site (checkLookalikeDomain), show the same card.
 //
 // Clicking a button sends: chrome.runtime.sendMessage({ type: "KAVACH_CHECK", text, url, mode: "check" | "talk" })
-// The card shows at most once per message (per chat on WhatsApp, per site elsewhere).
 // It sits in a closed Shadow DOM so the page's CSS can't break it.
+
+// ---------- which message is open (top-level so agent/test/screen_keys.test.mjs can test them) ----------
+
+// Gmail: the thread id is the last part of the address after "#":
+//   #inbox/FMfcgzQXJWDsKmwlMjRrhNvvrXHBzBJX · #search/rent+due/FMfcg… · #label/Work/FMfcg… · #all/18c3f…
+// Not an id: #inbox (the list), #inbox/p2 (page 2), #search/some+words (search results).
+function kavachGmailThreadId(hash) {
+  const parts = String(hash || "").replace(/^#/, "").split("?")[0].split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  // These folders have one extra part (the search words / label name) before the id.
+  const minParts = /^(search|label|category|advanced-search|apps)$/i.test(parts[0]) ? 3 : 2;
+  if (parts.length < minParts) return null;
+  const last = decodeURIComponent(parts[parts.length - 1]);
+  if (/^p\d+$/i.test(last)) return null;
+  return /^[A-Za-z0-9_-]{16,}$/.test(last) ? last : null;
+}
+
+// Gmail list views: #inbox, #inbox/p2, #search/words, #label/Work, #category/social.
+function kavachGmailIsList(hash) {
+  const parts = String(hash || "").replace(/^#/, "").split("?")[0].split("/").filter(Boolean);
+  if (parts.length <= 1) return true;
+  if (/^p\d+$/i.test(parts[parts.length - 1])) return true;
+  return parts.length === 2 && /^(search|label|category|advanced-search|apps)$/i.test(parts[0]);
+}
+
+// Outlook web: …/mail/0/inbox/id/AQQkADAw… or ?ItemID=… (message or conversation id).
+function kavachOutlookId(href) {
+  try {
+    const u = new URL(String(href || ""));
+    const q = u.searchParams.get("ItemID") || u.searchParams.get("itemid") || u.searchParams.get("ConversationId");
+    if (q) return q;
+    const m = u.pathname.match(/\/id\/([^/]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Small, fast text hash (FNV-1a) — only used to tell messages apart, never sent anywhere.
+function kavachHash(str) {
+  let h = 0x811c9dc5;
+  const s = String(str || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
 
 (() => {
   if (window.top !== window || window.__kavachDetect) return; // top page only, run once
@@ -76,9 +128,11 @@
     cardHost = null;
   }
 
-  async function showCard({ kind, text, onDone }) {
+  async function showCard({ kind, text, onDone, stillValid }) {
     hideCard();
     const s = await strings();
+    if (stillValid && !stillValid()) return; // the user moved on while the text loaded
+    hideCard(); // another card may have appeared meanwhile
     const box = document.createElement("div");
     box.style.display = "none"; // shown once our CSS has loaded, so it never flashes unstyled
     const root = box.attachShadow({ mode: "closed" });
@@ -155,21 +209,87 @@
 
   // ---------- Gmail / Outlook / WhatsApp: watch for opened messages ----------
 
-  // Which "message" the card belongs to. WhatsApp: the open chat (new messages in the same
-  // chat don't bring the card back). Email: subject + start of the body.
+  const SCREEN_TIMEOUT_MS = 6000;
+  const GROWTH_RECHECK = 1.2; // same message, text grew by >20% (Gmail loading the rest) → check again
+  const FLAGGED = new Set(["scam", "suspicious"]);
+
+  // Which message is open. Gmail: thread id from the address. Outlook: message id from the address,
+  // else subject + start of the body. WhatsApp: chat name + hash of the last 3 messages
+  // (a new message in the chat counts as a new thing to check).
   function messageKey(text) {
-    if (SITE === "whatsapp") {
+    if (SITE === "gmail") {
+      const id = kavachGmailThreadId(location.hash);
+      if (id) return "gmail|" + id;
+    } else if (SITE === "outlook") {
+      const id = kavachOutlookId(location.href);
+      if (id) return "outlook|" + id;
+    } else if (SITE === "whatsapp") {
       const name = document.querySelector("#main header")?.innerText?.split("\n")[0] || "";
-      return "whatsapp|" + name;
+      const bubbles = [...document.querySelectorAll("#main [data-pre-plain-text]")].slice(-3);
+      const last3 = bubbles.length
+        ? bubbles.map((el) => (el.querySelector(".selectable-text") || el).innerText || "").join("\n")
+        : text.slice(-300);
+      return "whatsapp|" + name + "|" + kavachHash(last3);
     }
-    return SITE + "|" + text.slice(0, 300);
+    return SITE + "|text|" + kavachHash(text.slice(0, 300));
   }
 
-  const handled = new Set(); // messages the card was already shown for (or dismissed)
-  let currentKey = null;
-  let lastText = "";
+  // Results for this page session: key → { verdict, reason, len, via, flagged }.
+  // flagged sticks: once a message was flagged, a later re-check never takes the warning away.
+  const results = new Map();
+  let currentKey = null; // the message open right now
+  let dismissed = false; // the card was closed / used for the message open right now
+  let cardKey = null; // which message the card on screen belongs to
   let running = false;
   let again = false;
+
+  function leaveMessage() {
+    // A local-only guess (server was down) gets another try with Nemotron when it's opened again.
+    const old = results.get(currentKey);
+    if (old?.via === "local") old.retry = true;
+    // Forget "shown / dismissed": opening it again brings the card back.
+    hideCard();
+    cardKey = null;
+    currentKey = null;
+    dismissed = false;
+  }
+
+  // Nemotron via our server (masked text only). Any problem → Quick Check on the device.
+  async function screenMessage(text) {
+    if (navigator.onLine !== false) {
+      try {
+        const { mask } = await load("core/mask.js");
+        const { masked } = mask(text);
+        const reply = await Promise.race([
+          chrome.runtime.sendMessage({ type: "KAVACH_SCREEN", text: masked.slice(0, 4000) }),
+          new Promise((resolve) => setTimeout(() => resolve(null), SCREEN_TIMEOUT_MS))
+        ]);
+        if (reply && (FLAGGED.has(reply.verdict) || reply.verdict === "safe")) {
+          return { verdict: reply.verdict, reason: reply.reason || "", via: "nemotron" };
+        }
+        log("Nemotron screen unavailable:", reply?.error || "no answer in 6 s", "→ Quick Check");
+      } catch (err) {
+        log("Nemotron screen failed → Quick Check", err?.message);
+      }
+    }
+    const { runQuickCheck } = await load("core/quickcheck.js");
+    const v = await runQuickCheck(text);
+    return { verdict: v.verdict, reason: "", via: "local" };
+  }
+
+  function showFor(key, text) {
+    if (cardKey === key || dismissed || key !== currentKey) return;
+    cardKey = key;
+    showCard({
+      kind: "message",
+      text,
+      stillValid: () => key === currentKey && !dismissed && cardKey === key,
+      onDone: () => {
+        if (key === currentKey) dismissed = true; // hidden until the user leaves this message
+        cardKey = null;
+      }
+    }).catch((err) => log("could not show the card", err?.message));
+  }
 
   async function scan() {
     if (running) {
@@ -180,30 +300,34 @@
     try {
       if (typeof extractPageText !== "function") return log("content/extract.js is not loaded");
       const { text, source } = extractPageText();
-      if (source !== SITE) {
-        // No email/chat open (e.g. the inbox list): remove a card left from the last message.
-        if (currentKey) hideCard();
-        currentKey = null;
-        lastText = "";
+      // Gmail list views (#inbox, #inbox/p2, #search/words, #label/Work): no email is open, even if
+      // the last one is still hidden in the page.
+      const gmailList = SITE === "gmail" && !kavachGmailThreadId(location.hash) && kavachGmailIsList(location.hash);
+      if (source !== SITE || gmailList) {
+        // No email/chat open (e.g. the inbox list): forget the last message.
+        if (currentKey) leaveMessage();
         return;
       }
       const key = messageKey(text);
       if (key !== currentKey) {
-        hideCard(); // the user opened something else
+        leaveMessage(); // the user opened something else
         currentKey = key;
       }
-      if (text === lastText || text.length < MIN_CHARS || handled.has(key)) return;
-      lastText = text;
+      if (text.length < MIN_CHARS || dismissed) return;
 
-      const { runQuickCheck } = await load("core/quickcheck.js");
-      const verdict = await runQuickCheck(text);
-      log("Quick Check:", verdict.verdict, verdict.confidence);
-      if (key !== currentKey || handled.has(key)) return; // the user moved on while we checked
-      if (verdict.verdict === "scam") {
-        // 2+ warning signs. Mark it now so it shows only once, whatever the user clicks.
-        handled.add(key);
-        await showCard({ kind: "message", text });
+      const known = results.get(key);
+      // Known and not much new text (and not a local-only guess while we're online) → no new call.
+      const fresh = known && text.length <= known.len * GROWTH_RECHECK && !(known.via === "local" && known.retry);
+      if (!fresh) {
+        const r = await screenMessage(text);
+        const flagged = FLAGGED.has(r.verdict) || !!known?.flagged;
+        // A local guess is retried with Nemotron the next time this message is opened.
+        results.set(key, { ...r, len: text.length, flagged, retry: false });
+        log(r.via === "nemotron" ? "Nemotron:" : "Quick Check:", r.verdict, r.reason);
       }
+      const res = results.get(key);
+      if (key !== currentKey || dismissed) return; // the user moved on while we checked
+      if (res.flagged) showFor(key, text);
     } catch (err) {
       log("could not check this message", err?.message);
     } finally {
@@ -307,7 +431,9 @@
 
   if (SITE) {
     new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener("hashchange", schedule); // Gmail changes #inbox/… when you open an email
+    // Gmail changes #inbox/… when you open an email; Back/Forward fires popstate.
+    window.addEventListener("hashchange", schedule);
+    window.addEventListener("popstate", schedule);
     schedule();
   } else if (host === "reportfraud.ftc.gov") {
     fillFtcReport();

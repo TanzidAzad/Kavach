@@ -66,8 +66,11 @@ async function startDeepCheck(text) {
 
   const verdict = await runDeepCheck({ text, imageDataUrl }, async (step) => {
     const li = document.createElement("li");
-    const mark = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "…";
-    li.textContent = `${mark} ${await translate(step.label, lang())} — ${await translate(step.detail, lang())}`;
+    const mark = document.createElement("span");
+    mark.className = `mark ${step.status}`;
+    mark.textContent = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "…";
+    const text = `${await translate(step.label, lang())} — ${await translate(step.detail, lang())}`;
+    li.append(mark, text);
     $("checklist").append(li);
   });
 

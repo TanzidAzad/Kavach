@@ -4,7 +4,7 @@ Branch: `ui` only. Files: `popup/`, `manifest.json`. Source: PRD sections 5 + 9 
 
 ## Quick Check milestone (by 10 PM)
 - [x] 1. `manifest.json`: add `storage` permission + host permission `http://localhost:8787/*`
-- [ ] 2. Popup matches PRD section 5, running on the mock Verdict (check the empty + result screens)
+- [x] 2. Popup matches PRD section 5 (empty + result screens, checklist marks, hover/focus/disabled states)
 - [ ] 3. Language dropdown (en/es/hi/zh) saved with `chrome.storage.local`, restored when the popup opens; on change call `prepareTranslation(lang)` from `core/translate.js` (starts the language download — must run right after the user's selection)
 - [ ] 4. Translate every label: load `data/ui_strings.json`, run each label through `core/translate.js`, redraw when the language changes (incl. error messages). Protect URLs (e.g. `https://www.uscis.gov/` inside steps) so the translator can't change them — swap them out before translating and back in after
 - [ ] 5. Result card: verdict color, confidence, ≤3 reasons, ≤3 steps, max 2 buttons. Core already puts the official URL inside a step, so don't add a separate contact block — make the URL in the step a clickable link instead

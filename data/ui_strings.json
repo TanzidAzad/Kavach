@@ -1,8 +1,15 @@
 {
   "appName": "Kavach",
+  "language": "Language",
+
   "pasteMessage": "Paste a message…",
   "uploadScreenshot": "Upload screenshot",
+  "screenshotAdded": "Screenshot added",
   "check": "Check",
+  "checking": "Checking…",
+  "emptyInput": "Paste a message or upload a screenshot first.",
+  "newCheck": "← New check",
+
   "scam": "SCAM",
   "suspicious": "SUSPICIOUS",
   "safe": "LOOKS SAFE",
@@ -10,11 +17,20 @@
   "high": "High",
   "medium": "Medium",
   "unsure": "Unsure",
+
   "why": "Why:",
   "whatToDo": "What to do:",
+  "officialContact": "Official contact:",
+  "call": "Call",
+  "website": "Website",
+  "reportToFtc": "Report it to the FTC",
+
   "askFamily": "Ask family",
-  "deepCheck": "Deep check →",
-  "checking": "Checking…",
   "copied": "Copied ✓",
-  "offline": "offline"
+  "copyFailed": "Could not copy.",
+  "deepCheck": "Deep check →",
+
+  "offline": "offline",
+  "deepCheckNeedsInternet": "Deep check needs internet",
+  "errorGeneric": "Something went wrong. Please try again."
 }

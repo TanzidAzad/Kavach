@@ -149,17 +149,21 @@ async function checkVoice() {
 // Auto-detection screen (Gmail/Outlook/WhatsApp card): a scam → scam/suspicious, a family text → safe, each <5 s.
 // Warning only: if it fails, the card still appears via Quick Check on the device.
 async function checkScreen() {
-  const name = "Email screen: /api/screen (scam flagged, safe passes, <5s)";
+  const name = "Email screen: /api/screen (scam flagged, safe passes, .gov page never flagged, <5s)";
   const fix = "restart `npm start` so it has /api/screen; cards still work via local Quick Check";
-  const ask = async (text) => {
-    const r = await post(SERVER.replace("/api/chat", "/api/screen"), { text }, { timeout: 6000 });
-    return { ms: r.ms, verdict: r.json && r.json.verdict, status: r.status };
+  const ask = async (text, pageUrl) => {
+    const r = await post(SERVER.replace("/api/chat", "/api/screen"), pageUrl ? { text, pageUrl } : { text }, { timeout: 6000 });
+    return { ms: r.ms, verdict: r.json && r.json.verdict, status: r.status, gov: !!(r.json && r.json.govSite) };
   };
   try {
-    const a = await ask("USCIS: your case is suspended. Pay $500 in gift cards today or ICE will arrest you.");
+    const scam = "USCIS: your case is suspended. Pay $500 in gift cards today or ICE will arrest you.";
+    const a = await ask(scam);
     const b = await ask("Hi mom, I landed safe. Call you tonight.");
-    const ok = (a.verdict === "scam" || a.verdict === "suspicious") && b.verdict === "safe" && a.ms < 5000 && b.ms < 5000;
-    line(ok ? true : "warn", name, `scam→${a.verdict || "HTTP " + a.status} ${a.ms}ms, safe→${b.verdict || "HTTP " + b.status} ${b.ms}ms`, fix);
+    // Same scam words, but the page the user is ON is reportfraud.ftc.gov → never flagged.
+    const g = await ask(scam, "https://reportfraud.ftc.gov/form/main");
+    const ok = (a.verdict === "scam" || a.verdict === "suspicious") && b.verdict === "safe" && g.verdict === "safe" && g.gov
+      && a.ms < 5000 && b.ms < 5000;
+    line(ok ? true : "warn", name, `scam→${a.verdict || "HTTP " + a.status} ${a.ms}ms, safe→${b.verdict || "HTTP " + b.status} ${b.ms}ms, .gov page→${g.verdict || "HTTP " + g.status}${g.gov ? "" : " (no gov guard — restart npm start)"}`, fix);
   } catch (e) {
     line("warn", name, errMsg(e), fix);
   }

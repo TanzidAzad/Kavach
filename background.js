@@ -72,6 +72,7 @@ function savePending(check) {
     mode: check.mode === "talk" ? "talk" : "check",
     imageDataUrl: typeof check.imageDataUrl === "string" ? check.imageDataUrl : null,
     problem: check.problem || null, // e.g. "cantReadPage" — the side panel explains it in plain words
+    source: check.source === "page" ? "page" : "message", // "page" = read from the tab ("Check this page")
     ts: Date.now()
   };
   return chrome.storage.session.set({ pendingCheck });
@@ -180,12 +181,12 @@ async function playPing() {
 const SCREEN_URL = "http://localhost:8787/api/screen";
 const SCREEN_TIMEOUT_MS = 6000;
 
-async function screen(text) {
+async function screen(text, pageUrl) {
   try {
     const r = await fetch(SCREEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: String(text ?? "").slice(0, 4000) }),
+      body: JSON.stringify({ text: String(text ?? "").slice(0, 4000), pageUrl: String(pageUrl ?? "") }),
       signal: AbortSignal.timeout(SCREEN_TIMEOUT_MS)
     });
     const json = await r.json().catch(() => null);
@@ -227,7 +228,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg?.type === "KAVACH_SCREEN") {
-    screen(msg.text).then(sendResponse);
+    screen(msg.text, sender.tab?.url).then(sendResponse);
     return true;
   }
 
@@ -246,8 +247,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     target
       .then((tab) =>
         readTab(tab.id)
-          .then((text) => savePending({ text, url: tab.url, mode: msg.mode, problem: text ? null : "cantReadPage" }))
-          .catch(() => savePending({ text: "", url: tab.url, mode: msg.mode, problem: "cantReadPage" }))
+          .then((text) => savePending({ text, url: tab.url, mode: msg.mode, source: "page", problem: text ? null : "cantReadPage" }))
+          .catch(() => savePending({ text: "", url: tab.url, mode: msg.mode, source: "page", problem: "cantReadPage" }))
           .then(() => !!sender.tab) // the panel that asked picks the check up by itself
       )
       .then((floated) => sendResponse({ ok: true, floated }));

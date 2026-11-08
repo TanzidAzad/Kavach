@@ -228,7 +228,7 @@ app.post("/api/chat", async (req, res) => {
 });
 
 // ---- POST /api/screen — fast yes/no screen for every opened email/chat ------------
-// Body { text } (already masked on the device, max 4000 chars). One short "agent" call (thinking off, temp 0),
+// Body { text, pageUrl? } (text already masked on the device, max 4000 chars). One short "agent" call (thinking off, temp 0),
 // same Brev → hosted routing as /api/chat, whole thing capped at 5 s. Answers { verdict, reason } with
 // verdict "scam" | "suspicious" | "safe", or 503 { error: "screen_unavailable" } (the extension then uses
 // Quick Check locally). Log: backend, verdict, ms — never the text.
@@ -267,6 +267,7 @@ function parseScreen(json) {
   return { verdict, reason };
 }
 
+let govSiteMod = null;
 app.post("/api/screen", async (req, res) => {
   const t0 = Date.now();
   const deadline = t0 + SCREEN_BUDGET_MS;
@@ -275,6 +276,17 @@ app.post("/api/screen", async (req, res) => {
   if (!text) {
     console.log(`screen - 400 ${Date.now() - t0}ms`);
     return res.status(400).json({ error: "text required" });
+  }
+  // Optional pageUrl = address of the page the user is ON (not links inside the text). A real .gov / .mil
+  // (or official) website is never screened: its pages are full of scam words. Text alone is screened as usual.
+  if (typeof body.pageUrl === "string" && body.pageUrl) {
+    try {
+      const site = await (govSiteMod ||= import("../core/govsite.js")).then((m) => m.checkGovSite(body.pageUrl));
+      if (site.verified) {
+        res.json({ verdict: "safe", reason: site.reason, govSite: true });
+        return console.log(`screen gov-site safe ${Date.now() - t0}ms`);
+      }
+    } catch { /* fall through to the normal screen */ }
   }
   let used = "none";
   try {

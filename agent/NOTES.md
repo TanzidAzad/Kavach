@@ -125,6 +125,22 @@ cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach
 > server answers, Kavach checks the message on the device only.) The server never logs message text.
 
 ## Done
+- 2026-11-08: **Real .gov pages never flagged** (branch `screening`). Bug: "Check this page" on reportfraud.ftc.gov/form/main
+  said "Likely scam" (Quick Check alone rates that page text scam/high: it's full of scam-report words).
+  New `core/govsite.js` → `checkGovSite(url)`: the page's OWN host ends in .gov/.mil (not xn--), or is/under a site in
+  data/official_contacts.json → `{ verified, host, reason: "This is a real U.S. government website (ends in .gov)." }`;
+  `govSiteVerdict()` = safe/high (level "unlikely"), one checklist line, `govSite: true`. Used in:
+  `sidepanel.js` runCheck (only when `input.source === "page"`, before Quick/Deep Check) · `background.js` (KAVACH_READ_TAB
+  saves `source: "page"`; everything else = "message"; KAVACH_SCREEN forwards `sender.tab.url` as `pageUrl`) ·
+  `content/detect.js` start(): verified host → no watcher, no lookalike card (FTC auto-fill still runs) ·
+  `/api/screen` optional `pageUrl` → `{ verdict: "safe", reason, govSite: true }`, log `screen gov-site safe`.
+  Pasted text / emails that only mention a .gov are checked exactly as before. Tests: `node core/govsite.test.js` 17/17
+  (ftc/uscis/irs/army.mil → unlikely; uscis-help.top, irs.gov.refund-center.com, punycode, file:// → not verified; scam
+  email linking to uscis-help.top still flagged; pasted text mentioning irs.gov still flagged) · all 8 core tests ok ·
+  curl /api/screen: 3 gov pageUrls → safe, gmail/no pageUrl → scam · preflight (new server on :8788) all ✅ except Brev
+  health (port-forward was down; hosted fallback answered). Preflight "Email screen" now also checks the .gov case.
+  **Restart `npm start`** so :8787 has the guard; reload the extension. Tell Role 1 + 2: sidepanel.js / background.js /
+  detect.js got small additive edits (see above).
 - 2026-11-08: **Auto-detection screen** (see section above): /api/screen + KAVACH_SCREEN + detect.js rewrite of the watcher; card reappears on every open.
 - 2026-11-08: **Voice in the FLOATING panel** (sidepanel.html?float=1 in float.js's iframe). Tested in real Chrome:
   audio out works as-is (AudioContext "running" after the click, first audio 1.1–1.7 s). **Mic did not:** inside the

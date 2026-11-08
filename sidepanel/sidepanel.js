@@ -5,6 +5,7 @@
 
 import { runQuickCheck } from "../core/quickcheck.js";
 import { runDeepCheck } from "../agent/agent.js";
+import { checkGovSite, govSiteVerdict } from "../core/govsite.js";
 import { translate, prepareTranslation } from "../core/translate.js";
 import { loadData } from "../core/data.js";
 import { scamLevel, loadVoice, ready as contractsReady } from "./contracts.js";
@@ -120,6 +121,20 @@ async function runCheck(input) {
   showChecking("checking");
   lineQueue = Promise.resolve();
   lastLineAt = 0;
+
+  // "Check this page" on a real .gov / .mil (or official) website: no text check — its pages are full of
+  // scam words and would be a false alarm. Only for the page itself (source "page"), never pasted text.
+  if (input.source === "page" && input.url) {
+    const site = await checkGovSite(input.url).catch(() => null);
+    if (run !== state.run) return;
+    if (site?.verified) {
+      const g = govSiteVerdict(site);
+      for (const step of g.trace) queueLine(step, run);
+      await lineQueue;
+      if (run !== state.run) return;
+      return renderVerdict(g);
+    }
+  }
 
   let v;
   try {

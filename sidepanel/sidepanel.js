@@ -193,9 +193,16 @@ function renderContact(v) {
 
 // ---------- Voice ----------
 
-async function speakableSummary() {
+async function speakableSummary(voice) {
   const v = state.verdict;
   const L = lang();
+  // Role 3's calm script ("Take a breath. You have time…"), translated; else our own summary.
+  if (typeof voice?.fallbackText === "function") {
+    try {
+      const english = await voice.fallbackText(v);
+      if (english) return await tr(english, L);
+    } catch {}
+  }
   const parts = [t(state.level), ...(v.reasons || []).slice(0, 3), ...(v.steps || []).slice(0, 3)];
   const said = await Promise.all(parts.map((p) => tr(String(p).replace(/https?:\/\/\S+/g, ""), L)));
   return said.join(". ");
@@ -217,7 +224,7 @@ async function talk() {
   } catch {
     // Live voice didn't work: read the answer and the steps aloud instead.
     try {
-      if (run === state.run && state.speaking) await voice.speakFallback(await speakableSummary(), lang());
+      if (run === state.run && state.speaking) await voice.speakFallback(await speakableSummary(voice), lang());
     } catch {}
   }
   if (run === state.run) setTalking(false);
@@ -459,6 +466,7 @@ async function init() {
   await initI18n(lang);
   try { contacts = await loadData("official_contacts.json"); } catch {}
   await contractsReady;
+  loadVoice(); // load early so the Talk click starts audio right away (Chrome needs it inside the click)
   applyLang(L);
   if (!(await handlePending())) showStart();
 }

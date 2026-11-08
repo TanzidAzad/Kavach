@@ -68,6 +68,8 @@
   "cardCheckIt": "Check it",
   "cardTalk": "Talk to Kavach",
   "cardNotNow": "Not now",
+  "showMore": "Show more",
+  "showLess": "Show less",
 
   "es": {
     "appName": "Kavach",
@@ -131,7 +133,9 @@
     "cardWebsite": "Este sitio podría estar haciéndose pasar por un sitio del gobierno. ¿Quiere que lo revise?",
     "cardCheckIt": "Revisarlo",
     "cardTalk": "Hablar con Kavach",
-    "cardNotNow": "Ahora no"
+    "cardNotNow": "Ahora no",
+    "showMore": "Ver más",
+    "showLess": "Ver menos"
   },
 
   "hi": {
@@ -196,7 +200,9 @@
     "cardWebsite": "यह वेबसाइट शायद सरकारी वेबसाइट होने का दिखावा कर रही है। क्या मैं इसे जाँचूँ?",
     "cardCheckIt": "जाँचें",
     "cardTalk": "Kavach से बात करें",
-    "cardNotNow": "अभी नहीं"
+    "cardNotNow": "अभी नहीं",
+    "showMore": "और देखें",
+    "showLess": "कम देखें"
   },
 
   "zh": {
@@ -261,6 +267,8 @@
     "cardWebsite": "这个网站可能在冒充政府网站。要我帮您检查吗？",
     "cardCheckIt": "检查一下",
     "cardTalk": "和 Kavach 说话",
-    "cardNotNow": "以后再说"
+    "cardNotNow": "以后再说",
+    "showMore": "显示更多",
+    "showLess": "收起"
   }
 }

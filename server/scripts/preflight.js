@@ -146,6 +146,25 @@ async function checkVoice() {
   }
 }
 
+// Auto-detection screen (Gmail/Outlook/WhatsApp card): a scam → scam/suspicious, a family text → safe, each <5 s.
+// Warning only: if it fails, the card still appears via Quick Check on the device.
+async function checkScreen() {
+  const name = "Email screen: /api/screen (scam flagged, safe passes, <5s)";
+  const fix = "restart `npm start` so it has /api/screen; cards still work via local Quick Check";
+  const ask = async (text) => {
+    const r = await post(SERVER.replace("/api/chat", "/api/screen"), { text }, { timeout: 6000 });
+    return { ms: r.ms, verdict: r.json && r.json.verdict, status: r.status };
+  };
+  try {
+    const a = await ask("USCIS: your case is suspended. Pay $500 in gift cards today or ICE will arrest you.");
+    const b = await ask("Hi mom, I landed safe. Call you tonight.");
+    const ok = (a.verdict === "scam" || a.verdict === "suspicious") && b.verdict === "safe" && a.ms < 5000 && b.ms < 5000;
+    line(ok ? true : "warn", name, `scam→${a.verdict || "HTTP " + a.status} ${a.ms}ms, safe→${b.verdict || "HTTP " + b.status} ${b.ms}ms`, fix);
+  } catch (e) {
+    line("warn", name, errMsg(e), fix);
+  }
+}
+
 async function checkDeep(runDeepCheck, name, input) {
   const t0 = Date.now();
   let steps = 0;
@@ -197,6 +216,7 @@ function checkReplay() {
   } else {
     line(false, "Deep Check: Spanish text + screenshot", "skipped — server is not running", "`cd server && npm start`, then run preflight again");
   }
+  if (serverUp) await checkScreen();
   if (serverUp) await checkVoice();
   checkReplay();
 

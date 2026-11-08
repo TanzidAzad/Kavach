@@ -1,23 +1,37 @@
 // background.js — Role 1 (UI). Service worker.
-// Its only job: when something asks for a check, save what to check and open the side panel.
+// Its job: when something asks for a check, save what to check and show Kavach.
+// Kavach shows as a FLOATING PANEL over the page (sidepanel/float.js → sidepanel.html?float=1).
+// Chrome's side panel is only the backup, for pages we can't draw on (chrome://, Web Store, …).
 //
 // Messages it understands:
-//   { type: "KAVACH_CHECK", text, url, mode, imageDataUrl? }
+//   { type: "KAVACH_CHECK", text, url, mode, imageDataUrl?, tabId? }
 //       From the card on a web page (content script) or from the toolbar popup.
-//       Saves { text, url, mode, imageDataUrl, ts } to chrome.storage.session "pendingCheck"
-//       and opens the side panel for that tab.
-//   { type: "KAVACH_READ_TAB", tabId, windowId, mode }
+//       Saves { text, url, mode, imageDataUrl, ts } to chrome.storage.session "pendingCheck",
+//       then shows the floating panel in that tab. Answers { floated: true | false }.
+//       (panelOpened: true = the popup already opened the side panel; just save.)
+//   { type: "KAVACH_READ_TAB", tabId, url, mode }
 //       From the popup's "Check this page" button. Reads the page with extractPageText()
-//       (content/extract.js), then saves the pendingCheck. Done here, not in the popup,
-//       because the popup closes as soon as the side panel opens.
+//       (content/extract.js), saves the pendingCheck, shows the floating panel. Answers { floated }.
 //
-// If Chrome refuses to open the side panel (it only allows it right after a click),
-// we fall back to: a "!" badge on the Kavach icon, a notification, and the icon is
-// switched so that one click on it opens the side panel straight away.
+// If the floating panel can't be shown and Chrome also refuses the side panel, we fall back to:
+// a "!" badge on the Kavach icon, a notification, and one click on the icon opens the side panel.
 
 const MAX_TEXT = 20000;
 
-// ---------- Opening the side panel ----------
+// ---------- Floating panel ----------
+
+async function showFloat(tabId) {
+  if (tabId == null) return false;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["sidepanel/float.js"] });
+    return true;
+  } catch (err) {
+    console.warn("[Kavach] can't float on this page:", err?.message || err);
+    return false; // page we can't draw on
+  }
+}
+
+// ---------- Opening the side panel (backup) ----------
 
 function openPanel({ tabId, windowId }) {
   // Must be called right away (no await before it), or Chrome forgets the user's click.
@@ -144,21 +158,29 @@ async function playPing() {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "KAVACH_CHECK") {
-    const tabId = sender.tab?.id ?? msg.tabId;
-    const windowId = sender.tab?.windowId ?? msg.windowId;
+    // The popup names the tab it was opened on; the page card is in sender.tab.
+    const tabId = msg.tabId ?? sender.tab?.id;
+    const windowId = msg.windowId ?? sender.tab?.windowId;
     const url = msg.url || sender.tab?.url || "";
 
-    // 1) open first (keeps the click), 2) then save. The panel also listens for the save.
-    const opening = msg.panelOpened ? Promise.resolve() : openPanel({ tabId, windowId });
-    savePending({ ...msg, url });
-    opening.then(
-      () => sendResponse({ ok: true, opened: true }),
-      (err) => {
-        console.warn("[Kavach] side panel blocked:", err?.message || err);
-        fallback(tabId);
-        sendResponse({ ok: true, opened: false });
-      }
-    );
+    if (msg.panelOpened) {
+      savePending({ ...msg, url }).finally(() => sendResponse({ ok: true }));
+      return true;
+    }
+    // Save first, so the panel finds the check as soon as it loads; then float it over the page.
+    savePending({ ...msg, url })
+      .then(() => showFloat(tabId))
+      .then(async (floated) => {
+        if (!floated) {
+          try {
+            await openPanel({ tabId, windowId });
+          } catch (err) {
+            console.warn("[Kavach] could not show the panel:", err?.message || err);
+            fallback(tabId);
+          }
+        }
+        sendResponse({ ok: true, floated });
+      });
     return true; // we answer later
   }
 
@@ -172,7 +194,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     readTab(msg.tabId)
       .then((text) => savePending({ text, url: msg.url, mode: msg.mode, problem: text ? null : "cantReadPage" }))
       .catch(() => savePending({ text: "", url: msg.url, mode: msg.mode, problem: "cantReadPage" }))
-      .finally(() => sendResponse({ ok: true }));
+      .then(() => showFloat(msg.tabId))
+      .then((floated) => sendResponse({ ok: true, floated }));
     return true;
   }
 });

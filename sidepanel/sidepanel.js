@@ -475,6 +475,38 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "KAVACH_READING") showChecking("readingPage");
 });
 
+// ---------- Floating panel mode (inside float.js's frame on the page) ----------
+
+const FLOAT = new URLSearchParams(location.search).has("float");
+
+// Compact styles for short windows. In the floating panel, use the page window's height (sent by float.js).
+function sizeClasses() {
+  const h = Number(new URLSearchParams(location.search).get("vh")) || innerHeight;
+  document.body.classList.toggle("short", h <= 760);
+  document.body.classList.toggle("tiny", h <= 620);
+  document.body.style.setProperty("--details-max", `${Math.max(240, h - 300)}px`); // "Show more" fits the window
+}
+sizeClasses();
+if (!FLOAT) addEventListener("resize", sizeClasses);
+function closeFloat() {
+  stopTalking();
+  window.parent.postMessage({ kavach: "close" }, "*"); // float.js checks it came from this frame
+}
+if (FLOAT) {
+  document.documentElement.classList.add("float");
+  document.body.classList.add("float");
+  $("close").hidden = false;
+  $("close").addEventListener("click", closeFloat);
+  // Tell float.js how tall the content is, so the frame fits it (no empty space, no scrolling).
+  const report = () => window.parent.postMessage({ kavach: "size", height: Math.ceil(document.body.scrollHeight) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("family-form").hidden) $("family-form").hidden = true; // Esc closes the sheet first
+    else closeFloat();
+  });
+}
+
 // ---------- Start ----------
 
 async function init() {

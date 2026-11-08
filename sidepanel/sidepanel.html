@@ -10,12 +10,16 @@
 <body class="panel">
   <header>
     <img class="logo" src="brand/logo-header.png" alt="Kavach">
-    <select id="lang" aria-label="Language">
-      <option value="en">English</option>
-      <option value="es">Español</option>
-      <option value="hi">हिन्दी</option>
-      <option value="zh">中文</option>
-    </select>
+    <div class="header-right">
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="hi">हिन्दी</option>
+        <option value="zh">中文</option>
+      </select>
+      <!-- Only in the floating panel -->
+      <button id="close" class="icon-btn" type="button" aria-label="Close" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+    </div>
   </header>
 
   <!-- The page never scrolls: everything fits the panel's height. -->
@@ -40,11 +44,14 @@
     <section id="result-view" class="view" hidden>
       <!-- While checking: small, quiet lines, like an assistant "thinking" -->
       <div id="thinking" class="thinking">
-        <p id="thinking-label" class="thinking-label"></p>
+        <p class="thinking-row">
+          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span id="thinking-label" class="thinking-label"></span>
+        </p>
         <div id="thinking-slot"></div>
       </div>
 
-      <div id="meter-block" hidden>
+      <div id="meter-block" class="tile" hidden>
         <p class="heading" data-i18n="isItScam">Is this a scam?</p>
         <p id="level" class="level"><span class="dot" aria-hidden="true">●</span> <span id="level-label"></span></p>
         <div id="meter" class="meter" role="img">
@@ -54,22 +61,22 @@
 
       <!-- Main answer: what to do + actions -->
       <div id="answer" class="answer" hidden>
-        <div class="todo-card">
+        <div class="todo-card tile">
           <h2 class="heading" data-i18n="whatToDo">What to do</h2>
           <ol id="steps"></ol>
           <p id="contact" class="contact" hidden></p>
         </div>
 
         <div id="help-block" hidden>
-          <button id="talk" class="primary talk" type="button">🎙️ <span id="talk-label" data-i18n="cardTalk">Talk to Kavach</span></button>
+          <button id="talk" class="primary talk" type="button"><span class="talk-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span id="talk-label" data-i18n="cardTalk">Talk to Kavach</span></button>
           <p class="small">
             <span data-i18n="speaksYourLanguage">Speaks your language</span>
             <button id="lang-info" class="info" type="button" aria-label="Languages" aria-expanded="false" aria-controls="voice-langs"><svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="6.2" r="1.15" fill="currentColor"/><path d="M10 9v5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
             <span id="voice-langs" hidden></span>
           </p>
           <div class="half-buttons">
-            <button id="family" type="button" data-i18n="tellFamily">Tell family</button>
-            <button id="ftc" type="button" data-i18n="reportToFtc">Report to FTC</button>
+            <button id="family" class="tile-btn" type="button"><span class="ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6M16 5.2a3 3 0 0 1 0 5.6M17.5 14.6c1.7.6 2.7 2.1 3 4.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span data-i18n="tellFamily">Tell family</span></button>
+            <button id="ftc" class="tile-btn" type="button"><span class="ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 21V4m0 0h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="reportToFtc">Report to FTC</span></button>
           </div>
           <p id="family-change-row" class="small" hidden>
             <span id="family-who"></span> · <button id="family-change" class="link tiny" type="button" data-i18n="changeContact">Change contact</button>

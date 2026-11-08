@@ -61,12 +61,11 @@
         </div>
 
         <div id="help-block" hidden>
-          <button id="talk" class="primary talk" type="button">🎙️ <span id="talk-label" data-i18n="talkToKavach">Talk to Kavach in your language</span></button>
-          <p class="small">
-            <span data-i18n="speaksYourLanguage">Speaks your language</span>
-            <button id="lang-info" class="info" type="button" aria-label="Languages" aria-expanded="false" aria-controls="voice-langs"><svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="6.2" r="1.15" fill="currentColor"/><path d="M10 9v5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-            <span id="voice-langs" hidden></span>
-          </p>
+          <!-- One block of actions: Talk (with the languages it speaks), then two half buttons -->
+          <button id="talk" class="primary talk" type="button">
+            <span class="talk-main">🎙️ <span id="talk-label" data-i18n="talkToKavach">Talk to Kavach in your language</span></span>
+            <span id="voice-langs" class="talk-sub"></span>
+          </button>
           <div class="half-buttons">
             <button id="family" type="button" data-i18n="tellFamily">Tell family</button>
             <button id="ftc" type="button" data-i18n="reportToFtc">Report to FTC</button>

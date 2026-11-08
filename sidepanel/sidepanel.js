@@ -226,6 +226,7 @@ async function speakableSummary(voice) {
 function setTalking(on) {
   state.speaking = on;
   setText($("talk-label"), t(on ? "stopTalking" : "talkToKavach"));
+  $("voice-langs").hidden = on;
 }
 
 async function talk() {
@@ -252,19 +253,16 @@ function stopTalking() {
   setTalking(false);
 }
 
+// Second line of the Talk button: the languages the voice speaks (native names, never translated).
 async function renderVoiceLanguages() {
   const { VOICE_LANGUAGES = [] } = await loadVoice();
-  const names = VOICE_LANGUAGES.map((l) => (typeof l === "string" ? l : l.name || l.label || l.code)).filter(Boolean);
-  $("voice-langs").textContent = names.join(" · ");
+  const names = VOICE_LANGUAGES.map((l) => (typeof l === "string" ? l : l.native || l.name || l.code)).filter(Boolean);
+  const shown = names.slice(0, 4);
+  if (names.length > shown.length) shown.push(`+${names.length - shown.length}`);
+  $("voice-langs").textContent = shown.join(" · ");
 }
 
 $("talk").addEventListener("click", talk);
-$("lang-info").addEventListener("click", async () => {
-  const open = $("voice-langs").hidden;
-  if (open) await renderVoiceLanguages();
-  $("voice-langs").hidden = !open;
-  $("lang-info").setAttribute("aria-expanded", String(open));
-});
 
 // ---------- Tell family ----------
 
@@ -481,6 +479,7 @@ async function init() {
   await initI18n(lang);
   try { contacts = await loadData("official_contacts.json"); } catch {}
   await contractsReady;
+  renderVoiceLanguages(); // also loads voice.js early
   loadVoice(); // load early so the Talk click starts audio right away (Chrome needs it inside the click)
   applyLang(L);
   if (!(await handlePending())) showStart();

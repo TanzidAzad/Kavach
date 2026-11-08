@@ -202,7 +202,9 @@ li::marker { color: var(--grey); }
 .contact .phone { font-weight: 700; white-space: nowrap; }
 
 #help-block { margin-top: 14px; }
-.talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px; }
+.talk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 62px; padding: 8px 14px; }
+.talk-main { display: flex; align-items: center; gap: 8px; }
+.talk-sub { font-size: 13px; font-weight: 500; color: #bdc1c6; }
 .small { margin: 6px 0 0; font-size: 14px; color: var(--grey); text-align: center; }
 #voice-langs { display: block; }
 .info {
@@ -219,11 +221,12 @@ li::marker { color: var(--grey); }
 }
 .info[aria-expanded="true"] { color: var(--text); }
 .info:hover { background: none; color: var(--text); }
-.half-buttons { display: flex; gap: 10px; margin-top: 12px; }
+.half-buttons { display: flex; gap: 10px; margin-top: 10px; }
 .half-buttons button { flex: 1; min-height: 50px; padding: 8px 10px; }
 
 /* ---------- Show more ---------- */
-.more { align-self: center; margin-top: 12px; font-size: 15px; color: var(--grey); }
+button.link.more { align-self: center; margin-top: 14px; font-size: 15px; color: var(--grey); text-decoration: none; }
+button.link.more:hover { text-decoration: underline; color: var(--text); }
 .details { flex: 1; min-height: 0; overflow-y: auto; margin-top: 4px; } /* only if a very long result doesn't fit */
 .details .heading { margin-top: 14px; }
 .details .checklist { font-size: 14px; }
@@ -268,13 +271,12 @@ li::marker { color: var(--grey); }
   .todo-card .heading, .details .heading { margin-top: 10px; }
   li + li { margin-top: 3px; }
   #help-block { margin-top: 12px; }
-  .talk { min-height: 50px; }
+  .talk { min-height: 54px; padding: 6px 14px; }
   .half-buttons { margin-top: 10px; }
   .half-buttons button { min-height: 44px; }
 }
 @media (max-height: 620px) {
   body.panel { font-size: 15px; }
   header { padding-top: 10px; }
-  .small { display: none; } /* "Speaks your language" hint */
 }
 

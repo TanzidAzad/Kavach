@@ -70,13 +70,19 @@ button.primary:hover { background: #3c4043; }
 
 .actions button:not(.primary) { flex: 1; }
 
-button.link {
-  display: block;
-  margin: 8px auto 0;
+/* Small ✕ in the top-left corner (first item in the header row). */
+button.close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -4px 2px 0 -6px;
   padding: 0;
   border: none;
+  border-radius: 50%;
   background: none;
   color: #5f6368;
   font-size: 13px;
+  line-height: 22px;
+  text-align: center;
 }
-button.link:hover { background: none; text-decoration: underline; }
+button.close:hover { background: #f1f3f4; color: #202124; }

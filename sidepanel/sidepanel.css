@@ -132,7 +132,7 @@ a:hover { color: var(--grey); }
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
-#meter-block .heading { margin-top: 4px; }
+#meter-block .heading { margin-top: 2px; }
 
 .level { margin: 0 0 10px; font-size: 26px; font-weight: 700; line-height: 1.2; }
 .level .dot { font-size: 18px; vertical-align: 3px; color: var(--grey); }
@@ -149,40 +149,91 @@ a:hover { color: var(--grey); }
 .lvl-unsure .meter [data-step="unsure"] { background: var(--suspicious); }
 .lvl-unlikely .meter [data-step="unlikely"] { background: var(--safe); }
 
-/* ---------- Reasons, steps ---------- */
+/* ---------- Side panel layout: fits the height, never scrolls ---------- */
+body.panel { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+body.panel header { flex: none; }
+body.panel main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
+body.panel .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+body.panel #start-view textarea { flex: 1; min-height: 120px; max-height: 320px; resize: none; }
+body.panel footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px 10px;
+  text-align: center;
+}
+
+/* ---------- Lists ---------- */
 ul, ol { margin: 0; padding-left: 22px; }
 li + li { margin-top: 6px; }
 li::marker { color: var(--grey); }
 
-.contact { margin: 12px 0 0; line-height: 1.7; }
-.contact .phone { font-weight: 700; white-space: nowrap; }
-
-/* ---------- Help: voice, family, FTC ---------- */
-#help-block { margin-top: 22px; }
-.talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 60px; }
-.small { margin: 8px 0 0; font-size: 15px; color: var(--grey); text-align: center; }
-.info {
-  min-height: 0;
-  padding: 0 4px;
-  background: none;
+/* ---------- "Thinking" while checking: small and quiet ---------- */
+.thinking { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.thinking-label {
+  margin: 4px 0 8px;
   color: var(--grey);
   font-size: 15px;
   font-weight: 600;
+  animation: breathe 1.6s ease-in-out infinite;
 }
-.info:hover { background: none; color: var(--text); }
+@keyframes breathe { 50% { opacity: 0.45; } }
+.checklist { list-style: none; padding: 0; margin: 0; font-size: 14px; line-height: 1.45; color: var(--grey); }
+.checklist li { margin: 0; padding: 3px 0 3px 12px; border-left: 2px solid var(--line); animation: fade-in 300ms ease-in; }
+.checklist li + li { margin-top: 0; }
+.checklist .label { color: var(--text); font-weight: 500; }
+.mark { display: inline-block; width: 1.3em; font-weight: 700; color: var(--grey); }
+.mark.fail { color: var(--scam); }
+.mark.pass { color: var(--safe); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-.links { display: flex; justify-content: center; gap: 12px; margin: 14px 0 0; }
-.links .sep { color: var(--grey); }
-
-.family-form {
-  margin-top: 12px;
-  padding: 14px;
+/* ---------- Answer ---------- */
+.answer { flex: none; display: flex; flex-direction: column; }
+.todo-card {
+  margin-top: 16px;
+  padding: 4px 16px 14px;
   border-radius: var(--card);
   background: var(--fill);
 }
-.family-form p { margin: 0 0 10px; font-weight: 600; }
-.family-form label { display: block; margin-bottom: 10px; font-size: 15px; color: var(--grey); }
-.family-form input {
+.todo-card .heading { margin-top: 12px; }
+.contact { margin: 10px 0 0; line-height: 1.6; }
+.contact .phone { font-weight: 700; white-space: nowrap; }
+
+#help-block { margin-top: 14px; }
+.talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px; }
+.small { margin: 6px 0 0; font-size: 14px; color: var(--grey); text-align: center; }
+#voice-langs { display: block; }
+.info { min-height: 0; padding: 0 4px; background: none; color: var(--grey); font-size: 14px; font-weight: 600; }
+.info:hover { background: none; color: var(--text); }
+.half-buttons { display: flex; gap: 10px; margin-top: 12px; }
+.half-buttons button { flex: 1; min-height: 50px; padding: 8px 10px; }
+
+/* ---------- Show more ---------- */
+.more { align-self: center; margin-top: 12px; font-size: 15px; color: var(--grey); }
+.details { flex: 1; min-height: 0; overflow-y: auto; margin-top: 4px; } /* only if a very long result doesn't fit */
+.details .heading { margin-top: 14px; }
+.details .checklist { font-size: 14px; }
+
+/* ---------- Footer ---------- */
+.status { font-size: 13px; color: var(--grey); }
+.status:empty { display: none; }
+
+/* ---------- Tell family sheet (over the bottom of the panel) ---------- */
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 16px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  background: #fff;
+}
+.sheet p { margin: 0 0 10px; font-weight: 600; }
+.sheet label { display: block; margin-bottom: 10px; font-size: 15px; color: var(--grey); }
+.sheet input {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -196,21 +247,22 @@ li::marker { color: var(--grey); }
 .form-buttons { display: flex; align-items: center; gap: 16px; }
 .form-buttons .primary { width: auto; min-height: 44px; font-size: 17px; padding: 8px 22px; }
 
-/* ---------- Checklist ---------- */
-#checklist {
-  padding: 12px 14px;
-  border-radius: var(--card);
-  background: var(--fill);
-  list-style: none;
+/* Short windows: a bit tighter so everything still fits */
+@media (max-height: 760px) {
+  body.panel { font-size: 16px; line-height: 1.4; }
+  .level { font-size: 23px; margin-bottom: 8px; }
+  #meter-block .heading { display: none; } /* the big label says it already */
+  .todo-card { margin-top: 12px; padding-bottom: 12px; }
+  .todo-card .heading, .details .heading { margin-top: 10px; }
+  li + li { margin-top: 3px; }
+  #help-block { margin-top: 12px; }
+  .talk { min-height: 50px; }
+  .half-buttons { margin-top: 10px; }
+  .half-buttons button { min-height: 44px; }
 }
-#checklist:empty { display: none; }
-#checklist li { animation: fade-in 300ms ease-in; }
-.mark { display: inline-block; width: 1.4em; font-weight: 700; color: var(--grey); }
-.mark.fail { color: var(--scam); }
-.mark.pass { color: var(--safe); }
-.detail { color: var(--grey); }
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-height: 620px) {
+  body.panel { font-size: 15px; }
+  header { padding-top: 10px; }
+  .small { display: none; } /* "Speaks your language" hint */
+}
 
-.again { display: block; margin: 20px auto 0; }
-
-.status { min-height: 1.5em; margin: 16px 0 0; text-align: center; font-size: 15px; color: var(--grey); }

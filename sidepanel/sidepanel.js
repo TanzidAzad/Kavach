@@ -44,20 +44,34 @@ function showStart(problemKey = null) {
   stopTalking();
   $("start-view").hidden = false;
   $("result-view").hidden = true;
+  $("family-form").hidden = true;
+  $("again").hidden = true;
   $("problem").hidden = !problemKey;
   if (problemKey) setText($("problem"), t(problemKey));
   setStatus("");
   $("message").focus();
 }
 
+// While checking, only the small "thinking" lines show.
 function showChecking(headingKey) {
   $("start-view").hidden = true;
   $("result-view").hidden = false;
-  for (const id of ["meter-block", "reasons-block", "steps-block", "help-block", "again", "family-form"]) $(id).hidden = true;
+  for (const id of ["meter-block", "answer", "details", "more", "again", "family-form"]) $(id).hidden = true;
+  $("thinking").hidden = false;
+  setText($("thinking-label"), t(headingKey));
   $("checklist").replaceChildren();
-  setText($("checklist-heading"), t(headingKey));
+  $("thinking-slot").append($("checklist"));
   setStatus("");
 }
+
+// "Show more" swaps the answer area for: why + what Kavach checked. The page itself never scrolls.
+function showDetails(open) {
+  $("details").hidden = !open;
+  $("answer").hidden = open;
+  $("more").setAttribute("aria-expanded", String(open));
+  $("more").replaceChildren(span(t(open ? "showLess" : "showMore")), open ? " ▴" : " ▾");
+}
+$("more").addEventListener("click", () => showDetails($("details").hidden));
 
 // ---------- Checklist (lines appear one by one, ~300 ms apart) ----------
 
@@ -80,7 +94,9 @@ function addLine(step) {
   const mark = document.createElement("span");
   mark.className = `mark ${step.status}`;
   mark.textContent = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "?";
-  li.append(mark, span(step.label || ""));
+  const label = span(step.label || "");
+  label.className = "label";
+  li.append(mark, label);
   if (step.detail) {
     const detail = span(step.detail);
     detail.className = "detail";
@@ -116,10 +132,7 @@ async function runCheck(input) {
   if (!v && text) {
     try { v = await runQuickCheck(text); } catch {}
   }
-  if (!v) {
-    setText($("checklist-heading"), "");
-    return showStart("errorGeneric");
-  }
+  if (!v) return showStart("errorGeneric");
 
   // Quick Check doesn't call onStep: show its trace as the checklist instead.
   await lineQueue;
@@ -149,6 +162,8 @@ function renderVerdict(v) {
   state.verdict = v;
   state.level = scamLevel(v);
 
+  $("thinking").hidden = true;
+  $("details-slot").append($("checklist")); // the checks now live under "Show more"
   $("meter-block").className = `lvl-${state.level}`;
   $("meter-block").hidden = false;
   setText($("level-label"), t(state.level));
@@ -157,14 +172,14 @@ function renderVerdict(v) {
   fillList($("reasons"), v.reasons);
   $("reasons-block").hidden = !(v.reasons || []).length;
   fillList($("steps"), v.steps);
-  $("steps-block").hidden = false;
   renderContact(v);
+  showDetails(false);
+  $("more").hidden = !(v.reasons || []).length && !$("checklist").children.length;
 
   const worried = state.level === "likely" || state.level === "highly_likely";
   $("help-block").hidden = !worried;
   if (worried) renderFamilyRow();
 
-  setText($("checklist-heading"), t("whatWeChecked"));
   $("again").hidden = false;
 }
 

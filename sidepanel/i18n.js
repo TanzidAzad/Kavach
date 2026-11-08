@@ -28,6 +28,8 @@ export const DEFAULT_STRINGS = {
   readingPage: "Reading the page…",
   checking: "Checking…",
   whatWeChecked: "What Kavach checked",
+  showMore: "Show more",
+  showLess: "Show less",
   isItScam: "Is this a scam?",
   highly_likely: "Highly likely scam",
   likely: "Likely scam",

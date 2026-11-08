@@ -7,7 +7,7 @@
   <link rel="icon" href="brand/icon32.png">
   <link rel="stylesheet" href="sidepanel.css">
 </head>
-<body>
+<body class="panel">
   <header>
     <img class="logo" src="brand/logo-header.png" alt="Kavach">
     <select id="lang" aria-label="Language">
@@ -18,11 +18,12 @@
     </select>
   </header>
 
+  <!-- The page never scrolls: everything fits the panel's height. -->
   <main>
     <!-- Start: shown when the panel is opened with nothing to check -->
-    <section id="start-view" hidden>
+    <section id="start-view" class="view" hidden>
       <p id="problem" class="problem" role="alert" hidden></p>
-      <textarea id="message" rows="7" data-i18n-placeholder="pasteMessage" placeholder="Paste a message…"></textarea>
+      <textarea id="message" data-i18n-placeholder="pasteMessage" placeholder="Paste a message…"></textarea>
       <div class="upload-row">
         <label class="upload" id="upload-label">📎 <span data-i18n="uploadScreenshot">Upload screenshot</span>
           <input id="screenshot" type="file" accept="image/*" hidden>
@@ -36,8 +37,13 @@
       <button id="check" class="primary" type="button" data-i18n="check">Check</button>
     </section>
 
-    <!-- Result: checklist while checking; meter, reasons and steps once the answer is in -->
-    <section id="result-view" hidden>
+    <section id="result-view" class="view" hidden>
+      <!-- While checking: small, quiet lines, like an assistant "thinking" -->
+      <div id="thinking" class="thinking">
+        <p id="thinking-label" class="thinking-label"></p>
+        <div id="thinking-slot"></div>
+      </div>
+
       <div id="meter-block" hidden>
         <p class="heading" data-i18n="isItScam">Is this a scam?</p>
         <p id="level" class="level"><span class="dot" aria-hidden="true">●</span> <span id="level-label"></span></p>
@@ -46,55 +52,63 @@
         </div>
       </div>
 
-      <div id="reasons-block" hidden>
-        <h2 class="heading" data-i18n="why">Why</h2>
-        <ul id="reasons"></ul>
-      </div>
+      <!-- Main answer: what to do + actions -->
+      <div id="answer" class="answer" hidden>
+        <div class="todo-card">
+          <h2 class="heading" data-i18n="whatToDo">What to do</h2>
+          <ol id="steps"></ol>
+          <p id="contact" class="contact" hidden></p>
+        </div>
 
-      <div id="steps-block" hidden>
-        <h2 class="heading" data-i18n="whatToDo">What to do</h2>
-        <ol id="steps"></ol>
-        <p id="contact" class="contact" hidden></p>
-      </div>
-
-      <div id="help-block" hidden>
-        <button id="talk" class="primary talk" type="button">🎙️ <span id="talk-label" data-i18n="talkToKavach">Talk to Kavach in your language</span></button>
-        <p class="small">
-          <span data-i18n="speaksYourLanguage">Speaks your language</span>
-          <button id="lang-info" class="info" type="button" aria-expanded="false" aria-controls="voice-langs">(i)</button>
-        </p>
-        <p id="voice-langs" class="small" hidden></p>
-
-        <p class="links">
-          <button id="family" class="link" type="button" data-i18n="tellFamily">Tell family</button>
-          <span class="sep" aria-hidden="true">·</span>
-          <button id="ftc" class="link" type="button" data-i18n="reportToFtc">Report to FTC</button>
-        </p>
-
-        <form id="family-form" class="family-form" hidden>
-          <p data-i18n="familyAsk">Who should we send it to?</p>
-          <label><span data-i18n="familyName">Their name</span><input id="family-name" autocomplete="off"></label>
-          <label><span data-i18n="familyReach">Their phone or email</span><input id="family-reach" autocomplete="off"></label>
-          <div class="form-buttons">
-            <button class="primary" type="submit" data-i18n="save">Save</button>
-            <button id="family-cancel" class="link" type="button" data-i18n="cancel">Cancel</button>
+        <div id="help-block" hidden>
+          <button id="talk" class="primary talk" type="button">🎙️ <span id="talk-label" data-i18n="talkToKavach">Talk to Kavach in your language</span></button>
+          <p class="small">
+            <span data-i18n="speaksYourLanguage">Speaks your language</span>
+            <button id="lang-info" class="info" type="button" aria-expanded="false" aria-controls="voice-langs">(i)</button>
+            <span id="voice-langs" hidden></span>
+          </p>
+          <div class="half-buttons">
+            <button id="family" type="button" data-i18n="tellFamily">Tell family</button>
+            <button id="ftc" type="button" data-i18n="reportToFtc">Report to FTC</button>
           </div>
-        </form>
-        <p id="family-change-row" class="small" hidden>
-          <span id="family-who"></span> · <button id="family-change" class="link tiny" type="button" data-i18n="changeContact">Change contact</button>
-        </p>
+          <p id="family-change-row" class="small" hidden>
+            <span id="family-who"></span> · <button id="family-change" class="link tiny" type="button" data-i18n="changeContact">Change contact</button>
+          </p>
+        </div>
       </div>
 
-      <div id="checklist-block">
-        <h2 id="checklist-heading" class="heading"></h2>
-        <ul id="checklist"></ul>
+      <!-- Show more: why + what Kavach checked (replaces the answer area while open) -->
+      <div id="details" class="details" hidden>
+        <div id="reasons-block">
+          <h2 class="heading" data-i18n="why">Why</h2>
+          <ul id="reasons"></ul>
+        </div>
+        <h2 class="heading" data-i18n="whatWeChecked">What Kavach checked</h2>
+        <div id="details-slot"></div>
       </div>
 
-      <button id="again" class="link again" type="button" data-i18n="checkAnother" hidden>Check another message</button>
+      <!-- The checklist moves between "thinking" and "details" -->
+      <ul id="checklist" class="checklist"></ul>
+
+      <button id="more" class="link more" type="button" aria-expanded="false" hidden></button>
     </section>
-
-    <p id="status" class="status" role="status"></p>
   </main>
+
+  <footer>
+    <button id="again" class="link tiny" type="button" data-i18n="checkAnother" hidden>Check another message</button>
+    <span id="status" class="status" role="status"></span>
+  </footer>
+
+  <!-- Tell family: first time, a small sheet slides over the bottom -->
+  <form id="family-form" class="sheet" hidden>
+    <p data-i18n="familyAsk">Who should we send it to?</p>
+    <label><span data-i18n="familyName">Their name</span><input id="family-name" autocomplete="off"></label>
+    <label><span data-i18n="familyReach">Their phone or email</span><input id="family-reach" autocomplete="off"></label>
+    <div class="form-buttons">
+      <button class="primary" type="submit" data-i18n="save">Save</button>
+      <button id="family-cancel" class="link" type="button" data-i18n="cancel">Cancel</button>
+    </div>
+  </form>
 
   <script type="module" src="sidepanel.js"></script>
 </body>

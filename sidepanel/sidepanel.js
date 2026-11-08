@@ -7,7 +7,7 @@ import { runQuickCheck } from "../core/quickcheck.js";
 import { runDeepCheck } from "../agent/agent.js";
 import { translate, prepareTranslation } from "../core/translate.js";
 import { loadData } from "../core/data.js";
-import { scamLevel, loadVoice } from "./contracts.js";
+import { scamLevel, loadVoice, ready as contractsReady } from "./contracts.js";
 import {
   LANGS, initI18n, t, tr, setText, span, repaintAll, officialUrl, makeLink, downloadingMessage, savedLang
 } from "./i18n.js";
@@ -458,6 +458,7 @@ async function init() {
   const L = await savedLang();
   await initI18n(lang);
   try { contacts = await loadData("official_contacts.json"); } catch {}
+  await contractsReady;
   applyLang(L);
   if (!(await handlePending())) showStart();
 }

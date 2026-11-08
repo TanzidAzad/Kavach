@@ -96,9 +96,13 @@
 
     const head = document.createElement("div");
     head.className = "head";
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    head.append(dot, "Kavach");
+    // Shield logo (Role 1's file, web-accessible in the manifest). If it can't load, just the name shows.
+    const logo = document.createElement("img");
+    logo.className = "logo";
+    logo.src = url("sidepanel/brand/mark-dark.png");
+    logo.alt = "";
+    logo.addEventListener("error", () => logo.remove());
+    head.append(logo, "Kavach");
 
     const msg = document.createElement("p");
     msg.className = "msg";

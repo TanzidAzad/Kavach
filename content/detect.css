@@ -1,6 +1,6 @@
 /* content/detect.css — Role 2. Styles for the small on-page card.
    Lives inside a closed Shadow DOM, so the website's CSS can't change it (and ours can't leak out).
-   Same look as the popup (PRD section 5): white, system font, 1px lines, amber dot, no heavy shadows. */
+   Same look as the popup (PRD section 5): white, system font, 1px lines, shield logo, no heavy shadows. */
 
 :host {
   all: initial;
@@ -38,11 +38,9 @@
   font-weight: 600;
 }
 
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #F29900;
+.logo {
+  width: auto;
+  height: 16px;
   flex: none;
 }
 

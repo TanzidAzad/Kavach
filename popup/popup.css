@@ -1,11 +1,17 @@
-/* popup/popup.css — Role 1 (UI). Design rules: PRD section 5. */
+/* popup/popup.css — Role 1 (UI). Design rules: PRD section 5.
+   Look: soft pills and rounded cards, one bold black action, quiet grey helper text.
+   Only PRD colors (red/amber/green + greys), white background, no shadows. */
 :root {
   --scam: #D93025;
   --suspicious: #F29900;
   --safe: #188038;
   --grey: #5f6368;
   --line: #dadce0;
+  --fill: #f1f3f4;     /* soft grey surface for pills and cards */
+  --fill-hover: #e8eaed;
   --text: #202124;
+  --pill: 999px;
+  --card: 14px;
 }
 
 * { box-sizing: border-box; }
@@ -16,124 +22,191 @@ body {
   margin: 0;
   background: #fff;
   color: var(--text);
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- Header ---------- */
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 14px 16px 10px;
 }
+.brand { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
 
-.brand { font-weight: 600; }
-
-main { padding: 12px 16px; overflow-wrap: anywhere; }
-
+/* Language: a pill with a small chevron */
 select {
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 5px 28px 5px 12px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f6368' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center;
   color: var(--text);
-  font: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
+select:hover { background-color: var(--fill-hover); }
 
+main { padding: 4px 16px 14px; overflow-wrap: anywhere; }
+
+/* ---------- Input screen ---------- */
 textarea {
+  display: block;
   width: 100%;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--card);
+  background: var(--fill);
+  color: var(--text);
   font: inherit;
   resize: none;
 }
-textarea:focus { outline: none; border-color: var(--grey); }
+textarea::placeholder { color: var(--grey); }
+textarea:focus { outline: none; background: #fff; border-color: var(--line); }
 
 .upload-row {
   display: flex;
   align-items: center;
-  min-height: 20px;
-  margin: 8px 0 12px;
-  color: var(--grey);
+  min-height: 30px;
+  margin: 10px 0 12px;
+}
+/* "Upload screenshot" and "Screenshot added" are small pills */
+.upload,
+.file-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--pill);
+  background: var(--fill);
+  font-size: 13px;
+  font-weight: 500;
 }
 .upload { cursor: pointer; }
-.upload:hover { text-decoration: underline; }
-.file-info { display: flex; align-items: center; gap: 6px; color: var(--text); }
-.note { margin: -6px 0 12px; font-size: 12px; color: var(--grey); }
+.upload:hover { background: var(--fill-hover); }
+.file-info { padding-right: 8px; }
+.note { margin: -4px 2px 12px; font-size: 12px; color: var(--grey); }
 
-a { color: var(--text); }
-a:hover { color: var(--grey); }
+/* ---------- Buttons ---------- */
+button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--fill);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+button:hover { background: var(--fill-hover); }
+
+/* The one bold action on each screen */
+button.primary,
+#deep-check {
+  background: var(--text);
+  color: #fff;
+}
+button.primary:hover,
+#deep-check:hover { background: #3c4043; }
+button.primary { width: 100%; min-height: 44px; font-size: 15px; }
+
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible,
+select:focus-visible,
+.upload:focus-within { outline: 2px solid var(--grey); outline-offset: 2px; }
 
 button.link {
+  min-height: 0;
+  white-space: nowrap;
   padding: 0;
-  border: none;
   background: none;
   color: var(--grey);
   font-size: 13px;
+  font-weight: 500;
 }
-button.link:hover { background: none; text-decoration: underline; }
+button.link:hover { background: none; color: var(--text); }
+#remove-file { font-size: 12px; }
 
-button {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
+a { color: var(--text); text-underline-offset: 2px; }
+a:hover { color: var(--grey); }
 
-button.primary {
-  width: 100%;
-  padding: 10px;
-  background: var(--text);
-  border-color: var(--text);
-  color: #fff;
-}
-button:hover { background: #f1f3f4; }
-button.primary:hover { background: #3c4043; }
-button:disabled { opacity: 0.5; cursor: default; }
-button:focus-visible, select:focus-visible { outline: 2px solid var(--grey); outline-offset: 1px; }
-
+/* ---------- Result ---------- */
 .verdict {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  font-size: 20px;
-  font-weight: 600;
+  align-items: center;
+  margin-bottom: 4px;
 }
-.verdict.scam { color: var(--scam); }
-.verdict.suspicious { color: var(--suspicious); }
-.verdict.safe { color: var(--safe); }
-.confidence { font-size: 14px; font-weight: 400; color: var(--grey); }
+/* Verdict as a solid colored pill: the answer is the first thing you see */
+.verdict > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--pill);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+.verdict.scam > span:first-child { background: var(--scam); }
+.verdict.suspicious > span:first-child { background: var(--suspicious); }
+.verdict.safe > span:first-child { background: var(--safe); }
+.verdict [aria-hidden] { font-size: 12px; }
+.confidence { font-size: 13px; color: var(--grey); }
 
-.heading { margin: 12px 0 4px; font-weight: 600; }
+/* Small grey section labels, like settings labels */
+.heading {
+  margin: 14px 0 6px;
+  color: var(--grey);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
 ul, ol { margin: 0; padding-left: 20px; }
-li + li { margin-top: 2px; }
+li + li { margin-top: 4px; }
+li::marker { color: var(--grey); }
 
-#checklist { padding-left: 0; list-style: none; }
+/* Checklist sits in a soft rounded card */
+#checklist {
+  padding: 10px 12px;
+  border-radius: var(--card);
+  background: var(--fill);
+  list-style: none;
+}
+#checklist:empty { display: none; } /* no empty card before the first check arrives */
 #checklist li { animation: fade-in 300ms ease-in; }
-#checklist.compact { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; }
+#checklist.compact { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
 #checklist.compact li { margin: 0; animation: none; }
 #checklist.compact .sep, #checklist.compact .detail { display: none; }
-.mark { display: inline-block; width: 1.2em; font-weight: 600; color: var(--grey); }
+.mark { display: inline-block; width: 1.3em; font-weight: 700; color: var(--grey); }
 .mark.fail { color: var(--scam); }
 .mark.pass { color: var(--safe); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-.buttons { display: flex; gap: 8px; margin-top: 12px; }
+.contact { margin: 10px 0 0; font-size: 12px; color: var(--grey); line-height: 1.6; }
+.contact a { color: var(--grey); }
+.contact a:hover { color: var(--text); }
+
+.buttons { display: flex; gap: 8px; margin-top: 16px; }
 .buttons button { flex: 1; }
 
-.contact { margin: 8px 0 0; font-size: 13px; color: var(--grey); }
-
+/* ---------- Footer ---------- */
 .footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
   min-height: 18px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .status { margin-left: auto; text-align: right; font-size: 12px; color: var(--grey); }

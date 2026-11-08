@@ -335,3 +335,6 @@ export async function runQuickCheck(text) {
     familyMessage: buildFamilyMessage(verdict, d.agency)
   };
 }
+
+// Also available from here, so the popup can import everything from one file.
+export { scamLevel } from "./level.js";

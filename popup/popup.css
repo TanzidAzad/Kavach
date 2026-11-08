@@ -51,13 +51,29 @@ textarea {
 }
 textarea:focus { outline: none; border-color: var(--grey); }
 
-.upload {
-  display: block;
+.upload-row {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
   margin: 8px 0 12px;
   color: var(--grey);
-  cursor: pointer;
 }
+.upload { cursor: pointer; }
 .upload:hover { text-decoration: underline; }
+.file-info { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.note { margin: -6px 0 12px; font-size: 12px; color: var(--grey); }
+
+a { color: var(--text); }
+a:hover { color: var(--grey); }
+
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--grey);
+  font-size: 13px;
+}
+button.link:hover { background: none; text-decoration: underline; }
 
 button {
   padding: 8px 12px;
@@ -107,4 +123,14 @@ li + li { margin-top: 2px; }
 .buttons { display: flex; gap: 8px; margin-top: 12px; }
 .buttons button { flex: 1; }
 
-.status { margin: 8px 0 0; text-align: right; font-size: 12px; color: var(--grey); }
+.contact { margin: 8px 0 0; font-size: 13px; color: var(--grey); }
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+  margin-top: 10px;
+}
+.status { margin-left: auto; text-align: right; font-size: 12px; color: var(--grey); }

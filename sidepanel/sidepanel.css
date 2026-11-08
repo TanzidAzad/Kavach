@@ -205,7 +205,19 @@ li::marker { color: var(--grey); }
 .talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px; }
 .small { margin: 6px 0 0; font-size: 14px; color: var(--grey); text-align: center; }
 #voice-langs { display: block; }
-.info { min-height: 0; padding: 0 4px; background: none; color: var(--grey); font-size: 14px; font-weight: 600; }
+.info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 2px;
+  margin-left: 2px;
+  vertical-align: -4px;
+  border-radius: 50%;
+  background: none;
+  color: var(--grey);
+}
+.info[aria-expanded="true"] { color: var(--text); }
 .info:hover { background: none; color: var(--text); }
 .half-buttons { display: flex; gap: 10px; margin-top: 12px; }
 .half-buttons button { flex: 1; min-height: 50px; padding: 8px 10px; }

@@ -95,6 +95,19 @@ cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach
 
 
 ## Done
+- 2026-11-08: **Voice in the FLOATING panel** (sidepanel.html?float=1 in float.js's iframe). Tested in real Chrome:
+  audio out works as-is (AudioContext "running" after the click, first audio 1.1–1.7 s). **Mic did not:** inside the
+  iframe Chrome uses the *web page's* mic permission (Kavach's own grant = ignored; tested with Browser.grantPermissions),
+  so mic-permission.html couldn't help, and WhatsApp Web / Facebook send `Permissions-Policy: microphone=(self)` (no
+  mic for any iframe). Asking in the frame would also give the website (maybe the scam site) the microphone.
+  **Fix:** when voice.js runs in a page iframe (`inPageFrame()`), the mic is held by a hidden offscreen page
+  `agent/mic-offscreen.html/.js` (reason USER_MEDIA, Kavach's own permission), streaming 100 ms PCM over a
+  `chrome.runtime` port "kavach-mic". Not allowed yet → opens mic-permission.html once (BroadcastChannel reaches the
+  frame ✓) → starts. Offscreen page closes on stop, and closes itself when the panel is closed mid-talk.
+  `VOICE_CONFIG.micVia` = "auto" | "frame" | "offscreen". Test: `agent/test/voice_float_e2e.mjs` **11/11** on
+  example.com and **10/10** on web.whatsapp.com (before the mid-talk case was added); side-panel voice_e2e 13/13 and voice_contract 5/5 unchanged.
+  Run like voice_e2e (copy manifest.json background.js content sidepanel core data agent; no autoplay flag needed;
+  `PAGE=` to pick the site).
 - 2026-11-08: voice.js matches the side panel's call (`await voice.startVoice({verdict, level, lang, text})` + `stopVoice?.()`): session is awaitable (resolves on end, rejects if never connected → panel falls back), `level` goes into the grounded facts ("What the screen shows: …"), `stopVoice()` added. Test: `node agent/test/voice_contract.test.mjs` (5/5), voice_smoke en OK.
 - 2026-11-08 full test run on merged main (Brev): core tests 4/4 · preflight 8/8 · run_deep.mjs 2 32/32 · eval Deep 39/40
   (miss t-hi-07 unknown link, no agency → safe/unsure) · popup_e2e 9/9 (Hindi reasons now translate as full sentences).
@@ -351,6 +364,12 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
    `(tool shim)` or `(brev … → hosted)` notes.
 
 ## Asks for teammates (current, re-checked 2026-11-08 after pulling main)
+- **Role 1 (FYI, nothing to change):** Chrome allows only ONE offscreen page per extension. While someone is talking
+  in the floating panel, voice.js owns it (agent/mic-offscreen.html); if your ping page is open, voice.js closes it
+  first (it closes itself after 30 s anyway). So a card ping can't play *during* a talk — background.js just logs a
+  warning. If you ever want both at once, we can merge into one offscreen page with reasons [AUDIO_PLAYBACK, USER_MEDIA].
+- **Role 1 (UX FYI):** a click anywhere on the page closes the float → the talk stops at once (mic + offscreen cleaned
+  up correctly). Fine for the demo; just don't click the page while Kavach is talking.
 - **Role 1 (popup):**
   - Voice: wire "Talk to Kavach" using agent/INTEGRATION.md → Voice (talk mode + fallback examples). Add the privacy
     line near the Talk button: "Your voice is sent to Google Gemini. Message details are hidden first."

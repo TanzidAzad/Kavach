@@ -10,6 +10,8 @@
 // - Only masked text and the cleaned verdict leave the browser (plus the user's voice, to Google — see NOTES).
 // - Voice starts talking right away; the microphone joins when allowed. If the side panel can't show the mic
 //   prompt, we open agent/mic-permission.html in a tab once, then attach the mic automatically.
+// - Floating panel (iframe on a web page): the mic is held by a hidden offscreen page (agent/mic-offscreen.html)
+//   with Kavach's own permission, never by the website. See micViaOffscreen.
 // - Any failure (or no answer within 5 s) → onState("error") + onError(err) → caller uses speakFallback().
 import { VOICE_LANGUAGES, voiceLanguage, cleanVerdict, maskedText, resultTurn, fallbackText, BEGIN } from "./voicePrompt.js";
 
@@ -20,6 +22,7 @@ export const VOICE_CONFIG = {
   connectTimeoutMs: 5000,       // token + WebSocket + setupComplete
   micPageWaitMs: 120000,        // how long we wait for the user on mic-permission.html
   micPromptWaitMs: 3000,        // a getUserMedia prompt that never shows (side panel) → open the page
+  micVia: "auto",               // "auto": floating panel (iframe on a page) → offscreen mic, else this page · "frame" · "offscreen"
   outRate: 24000,               // Gemini Live output: PCM16 24 kHz
   inRate: 16000,                // Gemini Live input: PCM16 16 kHz
 };
@@ -88,6 +91,64 @@ async function getMic(session) {
   try { return await tryGet(); } catch (e) { session._micNote("mic error: " + e.name); return null; }
 }
 
+// ---------------- microphone for the FLOATING panel (iframe on a web page) ----------------
+// Inside an iframe on a page, Chrome uses the PAGE's mic permission (tested: Kavach's own grant doesn't count there),
+// and sites like WhatsApp Web / Facebook send `Permissions-Policy: microphone=(self)`, which blocks the mic for every
+// iframe. So when embedded we never ask for the mic in the frame (that would give the website — maybe the scam site —
+// the microphone). A hidden extension page (agent/mic-offscreen.html) holds the mic with Kavach's own permission and
+// streams 100 ms PCM chunks to us over a chrome.runtime port.
+const MIC_OFFSCREEN = "agent/mic-offscreen.html";
+export function inPageFrame() {
+  try { if (window.top === window) return false; } catch { return true; }
+  const a = location.ancestorOrigins;
+  return !a || [...a].some((o) => o !== location.origin);
+}
+const useOffscreenMic = () => VOICE_CONFIG.micVia === "offscreen"
+  || (VOICE_CONFIG.micVia === "auto" && hasChrome() && !!chrome.offscreen && inPageFrame());
+
+let offq = Promise.resolve(); // create/close of the offscreen page, one at a time
+const offscreenOp = (f) => (offq = offq.catch(() => {}).then(f));
+async function ensureMicOffscreen() {
+  const url = chrome.runtime.getURL(MIC_OFFSCREEN);
+  const docs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+  if (docs.some((d) => (d.documentUrl || "").startsWith(url))) return;
+  // Chrome allows ONE offscreen page per extension. Another one = the card's ping page (closes itself after 30 s).
+  if (docs.length) await chrome.offscreen.closeDocument().catch(() => {});
+  await chrome.offscreen.createDocument({ url: MIC_OFFSCREEN, reasons: ["USER_MEDIA"], justification: "Microphone for Talk to Kavach in the floating panel" });
+}
+async function closeMicOffscreen() {
+  if (current && current._offscreenMic) return; // a new talk already uses it
+  const url = chrome.runtime.getURL(MIC_OFFSCREEN);
+  const docs = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] }).catch(() => []);
+  if (docs.some((d) => (d.documentUrl || "").startsWith(url))) await chrome.offscreen.closeDocument().catch(() => {});
+}
+
+// Streams the mic through the offscreen page; onPcm(base64 PCM16 16 kHz). Returns the port (disconnect = mic off).
+async function micViaOffscreen(session, onPcm) {
+  session._offscreenMic = true;
+  await offscreenOp(ensureMicOffscreen);
+  if (session.ended) return null;
+  const port = chrome.runtime.connect({ name: "kavach-mic" });
+  let askedPage = false;
+  port.onMessage.addListener(async (m) => {
+    if (!m || session.ended) return;
+    if (m.type === "pcm") onPcm(m.data);
+    else if (m.type === "on") session._micNote("microphone on");
+    else if (m.type === "error") session._micNote(m.name === "NotFoundError" ? "no microphone found" : "mic error: " + m.name);
+    else if (m.type === "need-permission") {
+      if (askedPage) { session._micNote("microphone not allowed"); return; }
+      askedPage = true;
+      session._micNote("asking for microphone in a new tab");
+      openMicPage();
+      const granted = await waitForMicPage(VOICE_CONFIG.micPageWaitMs);
+      if (session.ended) return;
+      if (granted) port.postMessage({ type: "start" }); else session._micNote("microphone not allowed");
+    }
+  });
+  port.postMessage({ type: "start" });
+  return port;
+}
+
 // ---------------- session ----------------
 let current = null; // the one live session (stopVoice / starting a new one ends it)
 
@@ -115,7 +176,7 @@ export function startVoice({ verdict = null, level = null, lang = "en", text = "
     _micNote: (m) => { try { onMic(m); } catch {} },
   };
   current = session;
-  let ws = null, micStream = null, inCtx = null, worklet = null, outCtx = null, nextAt = 0;
+  let ws = null, micStream = null, inCtx = null, worklet = null, outCtx = null, nextAt = 0, micPort = null;
   const playing = new Set();
   let modelTurnDone = true, outText = "", userText = "", guarded = false, connectTimer = null;
 
@@ -126,6 +187,8 @@ export function startVoice({ verdict = null, level = null, lang = "en", text = "
     clearTimeout(connectTimer);
     try { if (ws && ws.readyState <= 1) { if (session.ready) ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); ws.close(1000); } } catch {}
     try { micStream && micStream.getTracks().forEach((t) => t.stop()); } catch {}
+    try { micPort && micPort.disconnect(); } catch {}
+    if (session._offscreenMic) offscreenOp(closeMicOffscreen);
     try { worklet && worklet.disconnect(); } catch {}
     for (const s of playing) { try { s.stop(); } catch {} }
     playing.clear();
@@ -214,6 +277,17 @@ export function startVoice({ verdict = null, level = null, lang = "en", text = "
   }
 
   async function attachMic() {
+    if (useOffscreenMic()) {
+      try {
+        const audio = (data) => { if (session.ready && !session.ended) send({ realtimeInput: { audio: { data, mimeType: `audio/pcm;rate=${VOICE_CONFIG.inRate}` } } }); };
+        micPort = await micViaOffscreen(session, audio);
+        if (micPort && session.ended) micPort.disconnect();
+      } catch (e) {
+        console.warn("[kavach voice] offscreen mic failed", e);
+        session._micNote("mic error: " + (e.name || "offscreen"));
+      }
+      return;
+    }
     const stream = await getMic(session);
     if (!stream) return;
     if (session.ended) { stream.getTracks().forEach((t) => t.stop()); return; }

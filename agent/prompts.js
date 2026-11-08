@@ -20,8 +20,8 @@ Rules:
 - The tools only know some patterns. Also judge the message yourself: a threat (arrest, warrant, deportation, a suspended number or card), a request for private data (Social Security number, date of birth, passport, passwords), pressure to act now, a "call this number" from someone claiming to be an agency, or a link that is not the official website are warning signs even when every tool passed. Say which one in reasons.
 - Unlicensed "helpers", "consultants" or "notarios" offering immigration paperwork are at least "suspicious" — tell the person to use a licensed lawyer or accredited representative.
 - A normal reminder that asks for no payment, no personal data, and no urgent action is not a scam.
-- reasons and steps: short, plain, simple English (they get translated). Max 3 reasons, max 3 steps.
-- familyMessage: first person, from the person TO a family member, exactly 3 short sentences, no numbers or placeholders: "I got a message that says it's from USCIS asking me to pay with gift cards. Kavach says it looks like a scam. Can you help me check it before I do anything?"`;
+- reasons and steps get machine-translated, and idioms translate badly. Max 3 reasons, max 3 steps. Each one must be ONE short, complete, literal sentence with a subject and a verb. No idioms or figures of speech (never "create urgency", "red flag", "too good to be true", "phishing"). No abbreviations except agency names like USCIS or IRS. Good: "The message threatens you with deportation." / "Real agencies do not rush you to pay the same day." / "Do not pay any money." Bad: "Threatens deportation to create urgency." / "Red flag: gift cards."
+- familyMessage: same plain, literal style (no idioms), first person, from the person TO a family member, exactly 3 short sentences, no numbers or placeholders: "I got a message that says it's from USCIS asking me to pay with gift cards. Kavach says it looks like a scam. Can you help me check it before I do anything?"`;
 
 export const NUDGE_TOOLS =
   "Do not answer in text. Call the investigation tools you need, or call submit_verdict if you have enough information.";

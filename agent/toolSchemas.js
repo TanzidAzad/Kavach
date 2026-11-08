@@ -194,7 +194,9 @@ function submitVerdictSchema(agencies) {
         maxItems: 3,
         items: { type: "string" },
         description:
-          "Up to 3 short reasons in simple English, one sentence each, e.g. \"USCIS does not contact people on WhatsApp\". " +
+          "Up to 3 reasons. They get machine-translated, so each is ONE short, complete, literal sentence with a subject and a verb. " +
+          "No idioms (not \"create urgency\", \"red flag\", \"too good to be true\"), no abbreviations except agency names. " +
+          "e.g. \"The message threatens you with deportation.\", \"USCIS does not contact people on WhatsApp.\" " +
           "Never include links, phone numbers, case numbers, or placeholders like [PHONE_1] — say \"the link\", \"that phone number\", \"the case number\"."
       },
       steps: {
@@ -202,14 +204,16 @@ function submitVerdictSchema(agencies) {
         maxItems: 3,
         items: { type: "string" },
         description:
-          "Up to 3 short next steps in simple English, e.g. \"Do not pay anything\", \"Do not call that phone number\", \"Verify through the official channel\". " +
+          "Up to 3 next steps. They get machine-translated, so each is ONE short, complete, literal sentence with a verb. " +
+          "No idioms, no abbreviations except agency names. e.g. \"Do not pay any money.\", \"Do not call that phone number.\", " +
+          "\"Real agencies do not rush you to pay the same day.\", \"Check your case on the official USCIS website.\" " +
           "Never include links, phone numbers, case numbers, or placeholders."
       },
       officialAgency: str("The agency the message claims to be from, if it is in this list; otherwise \"none\".", {
         enum: [...agencies, "none"]
       }),
       familyMessage: str(
-        "Written BY the person who got the message, TO a family member, in first person. EXACTLY 3 short sentences: " +
+        "Written BY the person who got the message, TO a family member, in first person. It gets machine-translated: plain literal words, no idioms. EXACTLY 3 short sentences: " +
           "(1) \"I got a message that says it's from <agency> …\" plus what it asks for or threatens, (2) what Kavach found, (3) ask for help. Example: " +
           "\"I got a message that says it's from USCIS asking me to pay with gift cards or I'll be deported. Kavach says it looks like a scam. Can you help me check it before I do anything?\" " +
           "No amounts, dates, phone numbers, links, case numbers, or placeholders like [PHONE_1]."

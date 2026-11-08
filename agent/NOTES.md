@@ -94,7 +94,38 @@ cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach
 > which stays on your device.
 
 
+## Auto-detection screen — every opened email/chat → Nemotron (branch `screening`, 2026-11-08)
+**Files:** `server/index.js` → `POST /api/screen` · `background.js` → `{ type: "KAVACH_SCREEN", text }` ·
+`content/detect.js` (Gmail / Outlook / WhatsApp watcher). **Restart `npm start` on :8787** so it has /api/screen.
+- `/api/screen`: body `{ text }` (masked, ≤4000 chars) → one "agent" call, thinking off, temp 0, max_tokens 120,
+  Brev first (max 3.5 s) then hosted, whole thing ≤5 s → `{ verdict: "scam"|"suspicious"|"safe", reason }`; any failure
+  → 503 `{ error: "screen_unavailable" }`. A reason with a digit/link/email is swapped for a plain default sentence.
+  Log line: `screen <backend> <verdict> <ms>` only.
+- detect.js: message key = Gmail thread id from `location.hash` (`kavachGmailThreadId`), Outlook `/id/…` or `?ItemID=`
+  (`kavachOutlookId`), WhatsApp chat name + hash of last 3 bubbles; else hash of the first 300 chars. Gmail list views
+  (#inbox, #inbox/p2, #search/words, #label/X) = no message open. Text masked on the device (core/mask.js) → background
+  → server. No answer in 6 s / `{ error }` / offline → `runQuickCheck` locally (card on scam or suspicious).
+- Card comes back every time a message is opened. ✕ / Check it / Talk hide it only while that message stays open;
+  leaving the message forgets it. Results cached per key for the page session (reopen = instant, no call); a flag is
+  sticky per key (a later re-check never takes the warning away); local-only results are retried with Nemotron on the
+  next open. Same key and text grew >20% (Gmail loading the rest) → checked again. Scans on mutations + hashchange + popstate.
+- **Results:** `agent/test/screen_eval.mjs` (live server, 5 scams incl. "I need your cvc and credit card number" + 3 safe
+  incl. a real USCIS biometrics reminder and "Hi mom, I landed safe"): **8/8, median 207 ms, max 473 ms** (Brev).
+  Hosted fallback (Brev dead) 535 ms; no backend → 503 in 19 ms. `screen_keys.test.mjs` 23/23 · `screen_flow.test.mjs`
+  16/16 (fake Gmail page: reopen → card, ✕, same text twice → 2 cards, growth re-check, server down / 6 s timeout
+  (6.0 s) / offline → local card) · core tests 7/7 · run_deep.mjs 1 ALL PASSED · preflight **10/10** (new check:
+  "Email screen").
+- Note: Gmail puts emails with the same subject from the same sender in ONE thread (= one key, one card). That's fine:
+  the card still shows every time the thread is opened.
+
+### PRIVACY NOTE (auto-detection)
+> Every opened email is masked on the device and screened by Nemotron on our own GPU; personal details never leave the
+> device unmasked. (Phone numbers, case numbers, emails, A-numbers etc. are replaced with placeholders like [PHONE_1]
+> before the text leaves the browser. If our GPU server is down, the hosted NVIDIA API gets the same masked text; if no
+> server answers, Kavach checks the message on the device only.) The server never logs message text.
+
 ## Done
+- 2026-11-08: **Auto-detection screen** (see section above): /api/screen + KAVACH_SCREEN + detect.js rewrite of the watcher; card reappears on every open.
 - 2026-11-08: **Voice in the FLOATING panel** (sidepanel.html?float=1 in float.js's iframe). Tested in real Chrome:
   audio out works as-is (AudioContext "running" after the click, first audio 1.1–1.7 s). **Mic did not:** inside the
   iframe Chrome uses the *web page's* mic permission (Kavach's own grant = ignored; tested with Browser.grantPermissions),
@@ -138,6 +169,8 @@ cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach
 - Docs: `agent/EVAL.md` (judge-readable accuracy + slide table), `agent/INTEGRATION.md` (for Role 1).
 
 ## Next
+- Restart the main server (`cd server && npm start`) so it has `/api/screen`; then reload the extension.
+- Merge `screening` → main via PR (Rafid decides; not opened by Claude). Tell Role 2 that content/detect.js changed (watcher only; card UI/translations/lookalike/FTC untouched).
 - Voice: Rafid to test es + hi with a real mic in the side panel once Role 1 wires it (agent/test/voice.html works now).
 - Restart the main server (`npm start`) so it has `/api/voice/token`.
 - Role 1 / 2 / 4 asks below (none block the demo).

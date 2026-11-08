@@ -24,6 +24,8 @@ const DEFAULT_STRINGS = {
   screenshotNote: "Screenshots are sent as an image so the text can be read.",
   check: "Check",
   checking: "Checking…",
+  checks: "Checks:",
+  downloadingLanguage: "Downloading {lang}… (first time only)",
   emptyInput: "Paste a message or upload a screenshot first.",
   newCheck: "← New check",
   scam: "SCAM",
@@ -49,6 +51,21 @@ const DEFAULT_STRINGS = {
 };
 let strings = { ...DEFAULT_STRINGS };
 const t = (key) => strings[key] ?? DEFAULT_STRINGS[key] ?? key;
+
+// Optional per-language labels in data/ui_strings.json, e.g. { "check": "Check", …, "es": { "check": "Revisar", … } }.
+// A label found there is used as-is; anything missing falls back to machine translation.
+const LANG_NAMES = { es: "Spanish", hi: "Hindi", zh: "Chinese" };
+function handLabel(english, L) {
+  const own = strings[L];
+  if (L === "en" || !own || typeof own !== "object") return null;
+  if (english.endsWith(" ○")) {
+    const inner = handLabel(english.slice(0, -2), L);
+    return inner && `${inner} ○`;
+  }
+  const key = Object.keys(DEFAULT_STRINGS).find((k) => t(k) === english);
+  return (key && typeof own[key] === "string" && own[key]) || null;
+}
+const tr = (text, L) => handLabel(text, L) ?? translate(text, L);
 
 const state = {
   verdict: null,      // last Verdict shown
@@ -85,7 +102,7 @@ function makeLink(url, labelNode) {
 // Translates text but keeps web links untouched. Returns DOM nodes.
 async function translateToNodes(english, L) {
   const parts = String(english ?? "").split(URL_RE); // odd indexes are links
-  const done = await Promise.all(parts.map((p, i) => (i % 2 ? p : translate(p.trim(), L))));
+  const done = await Promise.all(parts.map((p, i) => (i % 2 ? p : tr(p.trim(), L))));
   const nodes = [];
   done.forEach((part, i) => {
     if (i % 2) {
@@ -116,7 +133,7 @@ function setText(el, english) {
 
 async function paintPlaceholder() {
   const L = lang();
-  const text = await translate(t("pasteMessage"), L);
+  const text = await tr(t("pasteMessage"), L);
   if (lang() === L) $("message").placeholder = text;
 }
 
@@ -134,6 +151,32 @@ const span = (english) => {
 // ---------- Status line (bottom right) ----------
 
 const baseStatus = () => (navigator.onLine ? "" : `${t("offline")} ○`);
+
+// Shown while Chrome downloads a language the first time. The translator isn't ready yet,
+// so the text comes from ui_strings.json (that language) or stays English.
+let langTimer = null;
+function waitForLanguage(L) {
+  clearTimeout(langTimer);
+  const own = strings[L]?.downloadingLanguage;
+  const nativeName = $("lang").selectedOptions[0]?.textContent || L;
+  const message = own ? own.replace("{lang}", nativeName) : t("downloadingLanguage").replace("{lang}", LANG_NAMES[L] || L);
+  clearTimeout(state.statusTimer);
+  delete $("status").dataset.en; // already final text: don't run it through the translator
+  $("status").textContent = message;
+  const started = Date.now();
+  const poll = async () => {
+    if (lang() !== L) return;
+    const status = await prepareTranslation(L).catch(() => "unavailable");
+    if (lang() !== L) return;
+    if (status === "downloading" && Date.now() - started < 10 * 60 * 1000) {
+      langTimer = setTimeout(poll, 3000);
+      return;
+    }
+    setStatus(baseStatus());
+    repaintAll();
+  };
+  langTimer = setTimeout(poll, 3000);
+}
 
 function setStatus(english, { flash = false } = {}) {
   clearTimeout(state.statusTimer);
@@ -182,7 +225,12 @@ function renderVerdict(v) {
   setText($("conf-label"), t("confidence"));
   setText($("conf-value"), t(v.confidence));
 
-  $("checklist-block").hidden = true;
+  // After a Deep Check, keep the checklist so people can see what the agent checked.
+  // It shrinks to one row of labels (details are already in the reasons) so the popup doesn't scroll.
+  const keepChecklist = v.mode === "deep" && $("checklist").children.length > 0;
+  $("checklist-block").hidden = !keepChecklist;
+  $("checklist").classList.toggle("compact", keepChecklist);
+  if (keepChecklist) setText($("checklist-heading"), t("checks"));
   $("reasons-block").hidden = false;
   fillList($("reasons"), v.reasons);
 
@@ -250,7 +298,13 @@ function addChecklistLine(step) {
   const mark = document.createElement("span");
   mark.className = `mark ${step.status}`;
   mark.textContent = step.status === "fail" ? "✗" : step.status === "pass" ? "✓" : "…";
-  li.append(mark, span(step.label), " — ", span(step.detail));
+  const sep = document.createElement("span");
+  sep.className = "sep";
+  sep.textContent = " — ";
+  const detail = span(step.detail);
+  detail.className = "detail";
+  li.title = step.detail || ""; // in the compact view, hover shows the detail
+  li.append(mark, span(step.label), sep, detail);
   $("checklist").append(li);
 }
 
@@ -299,6 +353,8 @@ async function startDeepCheck() {
   $("steps-block").hidden = !previous;
   $("reasons-block").hidden = true;
   $("checklist-block").hidden = false;
+  setText($("checklist-heading"), t("checking"));
+  $("checklist").classList.remove("compact");
   $("checklist").replaceChildren();
 
   try {
@@ -405,7 +461,7 @@ $("lang").addEventListener("change", () => {
   prepareTranslation(L)
     .then((status) => {
       // While the language downloads, the popup shows English; redraw a few times so it switches when ready.
-      if (status === "downloading") [3000, 8000, 15000, 30000].forEach((ms) => setTimeout(repaintAll, ms));
+      if (status === "downloading") waitForLanguage(L);
     })
     .catch(() => {});
   try {

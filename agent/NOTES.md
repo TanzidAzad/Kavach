@@ -370,3 +370,13 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
     Website, Ask family, New check, Deep check needs internet…) so the UI doesn't depend on machine translation.
   - Held-out set (10–20 new messages nobody tunes on) for an honest accuracy number.
   - Done ✓: data merged, guidance entries (20), "Hi mom" no longer flagged.
+
+## Translations to check with a native speaker (data/ui_strings.json, 2026-11-08)
+- Top-level English now matches sidepanel/i18n.js DEFAULT_STRINGS ("Why", "What to do", "Report to FTC" — no colons), so the side panel finds the hand labels. Old popup-only keys (scam/suspicious/safe/confidence/high/medium/checks/newCheck/askFamily/copied/deepCheck…) kept, with fixes.
+- hi `highly_likely` "लगभग पक्का धोखा" (≈"almost surely a scam") — slightly stronger than "highly likely"; alternative "बहुत हद तक धोखा".
+- hi `suspicious` "शक वाला" (was "संदिग्ध") — more everyday, but check it reads OK as an all-caps-style verdict label.
+- hi `officialContact` "सरकारी संपर्क" (government contact) — fine for USCIS/IRS/SSA/FTC; wrong if a non-government contact is ever shown.
+- hi `deepCheck` "पूरी जाँच" (full check) instead of "गहरी जाँच".
+- es `unsure` "No está claro"; es `familyName` "Nombre del familiar" (English "Their name" is ambiguous with "usted").
+- es `reportToFtc` "Reportar a la FTC" — "Denunciar" is more standard Spain-Spanish; "Reportar" is common in US Spanish.
+- zh `confidence` "把握" (was "确定程度"); zh `cardNotNow` "以后再说"; zh `unlikely` "不太像诈骗".

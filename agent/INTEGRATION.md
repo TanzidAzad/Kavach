@@ -92,3 +92,87 @@ CSS:
 Start the server (`cd server && npm start`). Reload the extension, then open
 `chrome-extension://<ID>/agent/test/integration.html`. Paste a message or pick `agent/test/es-uscis-whatsapp.png`,
 then click **Deep Check**.
+
+---
+
+# Voice: "Talk to Kavach" (side panel) — for Role 1
+
+Gemini Live is the **voice**; the Kavach verdict is the **brain**. The voice only knows the verdict, the language,
+and the masked message. It never invents phone numbers or links; the only ones it may say come from
+`data/official_contacts.json`. The server holds the Gemini key (`POST /api/voice/token`); the extension never sees it.
+
+```js
+import { startVoice, stopVoice, updateVerdict, speakFallback, stopFallback, fallbackText, VOICE_LANGUAGES } from "../agent/voice.js";
+```
+| export | what it does |
+|---|---|
+| `startVoice({ verdict, level, lang, text }, { onState, onTranscript, onError, onMic })` | Starts talking. Returns `session` right away; `session.stop()` ends it. The session is also awaitable: `await startVoice(...)` resolves when the talk ends and **rejects if live voice never connected** (→ call `speakFallback`). `level` = Role 2's `scamLevel(verdict)` (optional) so the voice says what the screen shows. `verdict` = Verdict or `null` (talk mode). `lang` = popup language code (`"en"`, `"es"`, `"hi"`, `"zh"`, …). `text` = the message (masked again inside). |
+| `onState(s)` | `"connecting"` → `"speaking"` ⇄ `"listening"` → `"ended"` (after stop) or `"error"`. |
+| `onTranscript({ role, text, final })` | `role` = `"kavach"` or `"user"`. `text` is the **whole line so far**: replace the last line of that role until `final: true`, then start a new line. |
+| `onError(err)` | Couldn't connect within 5 s, server down, no internet, connection lost. `onState("error")` fires too. → use `speakFallback`. |
+| `onMic(note)` | Optional. `"asking for microphone in a new tab"`, `"microphone on"`, `"microphone not allowed"`, `"no microphone found"`. Voice keeps talking even without a mic. |
+| `updateVerdict(session, verdict)` | Talk mode: call it when Deep Check finishes. Voice then explains the result. Returns `true` if sent. |
+| `speakFallback(text, lang)` | Offline browser voice (Chrome speechSynthesis). `text` must already be in that language. Resolves `true` when done, `false` if there is no voice for that language (then just show the text). `stopFallback()` stops it. |
+| `fallbackText(verdict)` | Short **English** script for the fallback ("Take a breath. You have time. This message is a scam. …"). Translate it first (same as reasons). |
+| `VOICE_LANGUAGES` | `[{ code, name, native, tts }]`, e.g. `{ code: "es", name: "Spanish", native: "Español", tts: "es-US" }`. All 4 popup languages are in it. |
+
+`stopVoice()` stops whatever is talking (live voice or fallback speech). The side panel (`sidepanel/sidepanel.js` on `ui`) already uses exactly this.
+
+**Rules:** call `startVoice` directly inside the click handler (Chrome only lets audio play after a click).
+Only one session at a time: `stop()` the old one first. Show a Stop button while a session runs.
+
+## Copy-paste: Talk button after a check, with fallback
+```js
+let voice = null;
+
+$("talk").onclick = () => {
+  if (voice) { voice.stop(); voice = null; return; }        // the same button is Stop while talking
+  stopFallback();
+  const lang = currentLang;                                   // "en" | "es" | "hi" | "zh"
+  voice = startVoice({ verdict: lastVerdict, lang, text: $("message").value }, {
+    onState: (s) => {
+      $("talk").textContent = s === "speaking" || s === "listening" || s === "connecting" ? "Stop" : "Talk to Kavach";
+      $("voice-state").textContent = { connecting: "Connecting…", speaking: "Kavach is speaking", listening: "Listening…" }[s] || "";
+      if (s === "ended" || s === "error") voice = null;
+    },
+    onTranscript: ({ role, text, final }) => showLine(role, text, final),
+    onError: async () => {                                    // no internet / server down → browser voice
+      const english = await fallbackText(lastVerdict);
+      const spoken = lang === "en" ? english : await translate(english, lang); // your existing translate()
+      const ok = await speakFallback(spoken, lang);
+      if (!ok) $("voice-state").textContent = spoken;         // no system voice for that language → show text
+    },
+  });
+};
+
+// One transcript line per turn: replace while it grows, new line after final.
+const current = {};
+function showLine(role, text, final) {
+  if (!current[role]) { current[role] = document.createElement("p"); current[role].className = role; $("transcript").append(current[role]); }
+  current[role].textContent = text;
+  if (final) current[role] = null;
+}
+```
+
+## Copy-paste: talk mode ("Talk to Kavach" before any check)
+```js
+$("talk-first").onclick = async () => {
+  const text = $("message").value;
+  voice = startVoice({ verdict: null, lang: currentLang, text }, callbacks);  // says "Take a breath… let me check, one moment"
+  const verdict = await runDeepCheck({ text }, showStep);                    // never throws
+  lastVerdict = verdict;
+  showVerdict(verdict);
+  if (voice) updateVerdict(voice, verdict);                                   // voice now explains the real result
+};
+```
+The voice never says scam/safe before `updateVerdict` (tested in Spanish).
+
+## Microphone
+The side panel can't show Chrome's mic prompt. The first time, `startVoice` opens `agent/mic-permission.html` in a
+tab ("Allow microphone"). After Allow, the tab closes and the voice gets the mic by itself, with no second click.
+Kavach keeps talking meanwhile. Permission is remembered for the extension. Nothing is needed in manifest.json.
+
+## Try it yourself
+Server running with `GEMINI_API_KEY` in `server/.env`. Reload the extension and open
+`chrome-extension://<ID>/agent/test/voice.html`. Pick a language → **Start**. Tick "Talk mode" to test the
+pending flow, or "Simulate server down" to hear the fallback.

@@ -1,0 +1,61 @@
+{
+  "when": "2026-11-08T04:53:31.554Z",
+  "results": [
+    {
+      "name": "Quick Check (Spanish text)",
+      "ok": true,
+      "detail": "SCAM/High, 108ms, 3 reasons, deep button shown"
+    },
+    {
+      "name": "Deep Check (Spanish text)",
+      "ok": true,
+      "detail": "SCAM/High, 2691ms, 5 checklist lines (gaps 307/302/307/307ms), status \"\""
+    },
+    {
+      "name": "Ask family copies text",
+      "ok": true,
+      "detail": "status \"Copied ✓\", clipboard: \"I got a message that says it's from USCIS asking me to pay with gift cards or I'll be deported. Kavach says it looks lik…\""
+    },
+    {
+      "name": "Screenshot upload → Deep Check",
+      "ok": true,
+      "detail": "SCAM/High, 7053ms, 5 lines, image note shown"
+    },
+    {
+      "name": "Language → hi",
+      "ok": true,
+      "detail": "translated in 434ms, Translator: available, saved: hi, shows \"● घोटाला आत्मविश्वास: ऊंचा | क्यों:\""
+    },
+    {
+      "name": "Language → es",
+      "ok": true,
+      "detail": "translated in 414ms, Translator: available, saved: es, shows \"● Estafa Confianza: Elevado | porque:\""
+    },
+    {
+      "name": "Server stopped → Deep check needs internet",
+      "ok": true,
+      "detail": "SCAM/High, status \"Deep check needs internet\", 0 checklist lines shown during the run"
+    },
+    {
+      "name": "Offline → Quick Check, no Deep button",
+      "ok": true,
+      "detail": "SCAM/High, status \"offline ○\", deep button hidden"
+    },
+    {
+      "name": "No exceptions / [kavach] warnings in the popup console",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "console": [
+    "info: [Kavach translate] en → hi: downloadable",
+    "info: [Kavach translate] downloading hi: 0%",
+    "info: [Kavach translate] downloading hi: 100%",
+    "info: [Kavach translate] en → hi: ready",
+    "info: [Kavach translate] en → es: available",
+    "info: [Kavach translate] downloading es: 0%",
+    "info: [Kavach translate] downloading es: 100%",
+    "info: [Kavach translate] en → es: ready",
+    "info: [kavach] server not reachable → Quick Check: Failed to fetch"
+  ]
+}

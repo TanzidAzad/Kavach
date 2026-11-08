@@ -32,10 +32,31 @@ After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on
 - Docs: `agent/EVAL.md` (judge-readable accuracy + slide table), `agent/INTEGRATION.md` (for Role 1).
 
 ## Next
-- Role 1 wires the popup per INTEGRATION.md → test in the real popup (stagger, checklist stays visible, quick-mode note).
-- After Role 4 merges `data` into main: re-run `node agent/test/eval_deep.mjs` (main data gives Quick 14/40 today).
+- Role 1 / 2 / 4 asks below (none block the demo).
 - Re-record `agent/demo_run.json` the night before (see Demo replay / record).
-- Restart the :8787 server once so it has the watchdog + header (code from 2026-11-08).
+- Demo laptop: switch the popup to Español, हिन्दी, 中文 once each the day before (first switch downloads the
+  on-device translation model — Hindi took several minutes on a fresh profile; the popup stays English meanwhile).
+
+## Integrated product (merged main, 2026-11-07) — `agent/test/popup_e2e.mjs`
+Real popup (`popup/popup.html` with Role 1's code) in Chrome 157, driven over DevTools; screenshots in
+`agent/test/integration_shots/` (+ results.json). **9/9 PASS:** Quick Check es-text SCAM/High 0.1s · Deep Check
+SCAM/High 2.7s, 5 lines ~300ms apart · Ask family copies the family message · screenshot upload → Deep SCAM/High
+5–7s, "Read screenshot" first, image note shown · Hindi + Spanish translate (after the model download) and are saved ·
+server unreachable → Quick Check + "Deep check needs internet" · offline → Quick only, no Deep button · no console
+errors. Also: core tests 4/4, `run_deep.mjs 2` 32/32, preflight 8/8 (with tunnel), eval unchanged (EVAL.md).
+manifest.json has `storage` + `http://localhost:8787/*`; popup imports `runDeepCheck` from `../agent/agent.js` ✓.
+**How to run it** (WSL + Windows Chrome; branded Chrome 137+ ignores --load-extension, so we load over CDP):
+```bash
+# copy the extension to a Windows folder (Chrome can't load from \\wsl paths reliably)
+D=/mnt/c/Users/Rafid/AppData/Local/Temp/kavach_ext; rm -rf $D; mkdir -p $D; cp -r manifest.json popup core data agent $D/
+"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9334 --enable-unsafe-extension-debugging \
+  --user-data-dir='C:\Users\Rafid\AppData\Local\Temp\kv_prof2' --no-first-run --window-position=-3000,0 about:blank &
+cd /mnt/c/Users/Rafid/AppData/Local/Temp && CDP=http://127.0.0.1:9334 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach_ext' \
+  WSLENV=CDP:EXT "/mnt/c/Program Files/nodejs/node.exe" '\\wsl.localhost\Ubuntu\home\rafid\hackutd\Kavach\agent\test\popup_e2e.mjs'
+```
+Headless Chrome works for everything except translation (it never downloads the language models → reported `ENV`).
+`LANG_WAIT_MS` (default 60000) = how long to wait for a translation. Server unreachable is simulated with
+`Network.setBlockedURLs` (the real server keeps running).
 
 ## Latest results (Brev, 2026-11-08) — `SERVER=… node agent/test/run_deep.mjs 2`
 32/32 PASS. Text checks 1.5–3.2s; es-screenshot 6.1–8.7s, hi-screenshot 3.4s (hosted vision 1.3–2.7s, spikes seen
@@ -232,22 +253,21 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
 3. `npm run smoke -- brev`, then `npm start`. Log lines show `brev` / `hosted` per request, plus
    `(tool shim)` or `(brev … → hosted)` notes.
 
-## Asks for teammates (current, 2026-11-08)
-- **Role 1 (popup)** — all in `agent/INTEGRATION.md`:
-  - Add to manifest.json: `"host_permissions": ["http://localhost:8787/*"]`, `"permissions": ["storage"]`.
-  - Steps can arrive several at once → show them ~300 ms apart in arrival order (queue; translate inside the queue —
-    today `onStep` awaits `translate` per step, so lines can come out of order). Keep the checklist visible after the verdict.
-  - `mode: "quick"` → "Deep check needs internet", and show `verdict.trace` (onStep isn't called then).
-  - With a screenshot: note "Screenshots are sent as images so we can read the text." Today Deep Check only runs for
-    screenshots or the Deep button — fine.
-- **Role 4 (data):**
-  - **Merge `data` into main** — it already has the verified phones and ICE/FTC/SSA contacts, and Quick Check goes
-    from 14/40 to 24/40 on your eval set with the newer red_flags.json. (DHS/FBI still missing — optional.)
-  - `guidance.json`: entries for ICE/deportation threats, fake links, processing fees, SSN requests, unlicensed helpers.
-  - For EVAL honesty: a small held-out set (10–20 new messages nobody tunes on) would let us quote a clean number.
+## Asks for teammates (current, 2026-11-07, after the merge)
+- **Role 1 (popup):**
+  - After a Deep Check the verdict hides the checklist (`renderVerdict` sets `checklist-block.hidden = true`), so the
+    5 live checks — the "agent at work" moment — vanish. Suggest keeping it under the verdict for deep results:
+    `$("checklist-block").hidden = v.mode !== "deep" || !$("checklist").children.length;` (heading "Checks").
+  - First switch to a language downloads the translation model (Hindi: minutes on a fresh profile); the popup stays
+    English with no hint. When `prepareTranslation()` returns `"downloading"`, show e.g. "Downloading Hindi… (first time only)".
+  - Machine-translated labels are off: "Why:" → es "porque:", "Call" → hi "बुलावा" (= summons), "← New check" →
+    hi "नया चेक" (arrow lost). Use per-language labels from ui_strings.json first (see Role 4), translate() only as fallback.
+  - Optional: `mode: "quick"` results could show `verdict.trace` as the checklist (today: reasons + status line — fine).
 - **Role 2 (core):**
-  - `searchGuidance` returns general advice with `status: "fail"` and matches on generic words ("Hi mom… call you"
-    → "USCIS will never ask you to pay fees…"). Agent now ignores it for verdicts and hides payment advice when no
-    money is asked; Quick Check may still show it. Maybe `status: "unknown"` for guidance + require a specific keyword.
-  - `runQuickCheck("")` → `safe/unsure` with 4 steps; maybe `suspicious/unsure` "nothing to check".
-  - `checkLookalikeDomain("myUSCIS")` → fail (no dot). Agent guards it; Quick Check may hit it.
+  - `core/tools.js:259` says "(and 1 more warning signs)" → say "1 more warning sign" when the count is 1 (singular), "N more warning signs" otherwise.
+  - Still open (minor): `runQuickCheck("")` → safe/unsure; `checkLookalikeDomain("myUSCIS")` → fail (no dot).
+- **Role 4 (data):**
+  - `ui_strings.json`: add `es` / `hi` / `zh` versions of the ~30 labels (verdict words, Why, What to do, Call,
+    Website, Ask family, New check, Deep check needs internet…) so the UI doesn't depend on machine translation.
+  - Held-out set (10–20 new messages nobody tunes on) for an honest accuracy number.
+  - Done ✓: data merged, guidance entries (20), "Hi mom" no longer flagged.

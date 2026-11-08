@@ -2,11 +2,11 @@
 // eval set, plus Role 4's "phrase match only" baseline. Read-only on data/ and eval/.
 //
 // Usage (server running):  node agent/test/eval_deep.mjs [--server http://localhost:8787/api/chat] [--json out.json]
-//   Test set: `git show origin/data:eval/test_messages.json` (run `git fetch origin data` first), or EVAL_SET=<file>.
+//   Test set: eval/test_messages.json (or EVAL_SET=<file>; falls back to `git show origin/data:…`).
 //   CODE_ROOT=<dir> → load agent/, core/, data/ from another folder (e.g. a copy with the data branch's data/).
 // Deep Check runs 3 messages at a time. Prints a summary; the JSON has every row.
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 
@@ -17,8 +17,11 @@ const SERVER = arg("--server", "http://localhost:8787/api/chat");
 const OUT = arg("--json", null);
 const CONCURRENCY = 3;
 
-const testSet = JSON.parse(process.env.EVAL_SET
-  ? readFileSync(process.env.EVAL_SET, "utf8")
+// Default: eval/test_messages.json in this checkout (on main since Role 4's merge); else origin/data's copy.
+const LOCAL_SET = path.join(REPO, "eval/test_messages.json");
+const SET_FILE = process.env.EVAL_SET || (existsSync(LOCAL_SET) ? LOCAL_SET : null);
+const testSet = JSON.parse(SET_FILE
+  ? readFileSync(SET_FILE, "utf8")
   : execSync("git show origin/data:eval/test_messages.json", { cwd: REPO, encoding: "utf8" }));
 const imp = (p) => import(pathToFileURL(path.join(ROOT, p)).href);
 const agent = await imp("agent/agent.js");
@@ -109,7 +112,7 @@ const engines = { "Quick Check": score((r) => r.quick.verdict), "Deep Check": sc
 const ms = rows.map((r) => r.deep.ms);
 const summary = {
   when: new Date().toISOString(), commit: execSync("git rev-parse --short HEAD", { cwd: REPO, encoding: "utf8" }).trim(),
-  setCommit: execSync("git rev-parse --short origin/data", { cwd: REPO, encoding: "utf8" }).trim(),
+  setCommit: SET_FILE ? path.relative(REPO, SET_FILE) : execSync("git rev-parse --short origin/data", { cwd: REPO, encoding: "utf8" }).trim(),
   codeRoot: ROOT === REPO ? "repo" : ROOT, n: rows.length, wallMs: Date.now() - t0,
   deepLatency: { median: q(ms, 0.5), p90: q(ms, 0.9), max: Math.max(...ms) },
   deepModeQuick: rows.filter((r) => r.deep.mode !== "deep").length,

@@ -26,7 +26,10 @@ That run exposed problems, and we fixed them:
 2. **Weak spot:** when all the tools passed, the model said "safe" even for "a warrant will be issued for your arrest". The prompt now tells it to judge threats, requests for SSN or date of birth, callback numbers and unofficial helpers itself. In code, a threat of arrest or deportation is never "safe".
 3. **Rule:** a failed check plus 2+ independent warning signs means "scam", with high confidence.
 
-**After the fixes, on the same 40 messages: 40/40 in both runs** (data branch data), and 36/40 on `main` data. These numbers were **tuned on this set**, so they are optimistic. Don't put 100% on the slide. A fair claim is "85% before tuning, and every scam caught".
+**After the fixes, on the same 40 messages: 40/40 in both runs** (data branch data; the old pre-merge `main` data gave 36/40).
+**Re-run on merged `main` (2026-11-07, Role 4's data + UI merged, Brev): unchanged** — Deep 40/40, 20/20 scams called scam,
+0/12 safe flagged; Quick Check 24/40, 18/20; baseline 19/40, 15/20 (`node eval/run_eval.js` agrees on Quick/baseline).
+Median 3.0 s, p90 4.7 s, max 6.1 s, 0 fallbacks, 0/97 Brev→hosted. These numbers were **tuned on this set**, so they are optimistic. Don't put 100% on the slide. A fair claim is "85% before tuning, and every scam caught".
 
 ## Speed and reliability (Deep Check, 6 full runs = 240 checks)
 - Median **2.8–3.0 s**, slowest 10% (p90) **3.3–5.3 s**, slowest single check 6.2 s. All were under the 15 s budget.
@@ -40,9 +43,7 @@ That run exposed problems, and we fixed them:
 
 ## How to re-run
 ```bash
-git fetch origin data
 cd server && npm start                         # Brev or hosted, see agent/NOTES.md
-node agent/test/eval_deep.mjs --json /tmp/eval.json
-# with the data branch's data/ (no merge): copy agent/ core/ + `git archive origin/data data` into a folder, then
-CODE_ROOT=<that folder> node agent/test/eval_deep.mjs
+node agent/test/eval_deep.mjs --json /tmp/eval.json   # uses eval/test_messages.json from this checkout
+# other data/: CODE_ROOT=<folder with agent/ core/ data/> node agent/test/eval_deep.mjs
 ```

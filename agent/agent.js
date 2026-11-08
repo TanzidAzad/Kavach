@@ -73,9 +73,17 @@ function cachePut(key, verdict, steps) {
 export const clearCache = () => cache.clear();
 
 // A bug in our own code must never break the popup (we fall back), but it must not be silent either.
+// Server down / timeout / bad status is expected (no internet, server stopped) → info, not a warning.
+const isNetworkError = (e) =>
+  e instanceof DeadlineError ||
+  /^(AbortError|TimeoutError)$/.test(e?.name) ||
+  (e instanceof TypeError && /fetch/i.test(e.message)) ||
+  /^(server status|empty model reply)/.test(e?.message || "");
+
 function reportError(e) {
   try {
-    console.warn("[kavach] Deep Check error (fell back):", e && e.message);
+    if (isNetworkError(e)) console.info("[kavach] server not reachable → Quick Check:", e && e.message);
+    else console.warn("[kavach] Deep Check error (fell back):", e && e.message);
     if (typeof CONFIG.onError === "function") CONFIG.onError(e);
   } catch {}
 }

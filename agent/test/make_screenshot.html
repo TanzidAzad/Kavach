@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Kavach test screenshots</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 900px; margin: 16px auto; padding: 0 16px; }
+    canvas { width: 300px; border: 1px solid #ccc; margin-right: 12px; }
+    pre { display: none; }
+  </style>
+</head>
+<body>
+  <h3>Test screenshots (fake scams — all numbers are fake)</h3>
+  <p>Draws phone-style WhatsApp chats. Click a button to download the PNG, then use it in
+    <code>dev.html</code> → "Upload screenshot". Save them as <code>agent/test/</code><i>name</i><code>.png</code> for the Node harness.</p>
+  <p><button id="dl-es">Download es-uscis-whatsapp.png</button> <button id="dl-hi">Download hi-ice-whatsapp.png</button></p>
+  <canvas id="es" width="720" height="1280"></canvas><canvas id="hi" width="720" height="1280"></canvas>
+  <pre id="out"></pre>
+  <script>
+    // Fake scam chats. The 555 numbers and the receipt number are made up.
+    const CHATS = {
+      es: {
+        contact: "+1 (469) 555-0187",
+        time: "10:42",
+        ui: { online: "en línea", today: "HOY", input: "Mensaje" },
+        bubbles: [
+          "USCIS AVISO OFICIAL: Su caso EAC2490123456 tiene un problema.",
+          "Debe pagar $500 en tarjetas de regalo HOY o será deportado.",
+          "Llame al (469) 555-0187 o responda por este WhatsApp con las fotos de las tarjetas."
+        ]
+      },
+      hi: {
+        contact: "+1 (972) 555-0199",
+        time: "18:05",
+        ui: { online: "ऑनलाइन", today: "आज", input: "संदेश" },
+        bubbles: [
+          "ICE चेतावनी: आपके खिलाफ निर्वासन का आदेश जारी हुआ है।",
+          "गिरफ्तारी से बचने के लिए आज ही $800 के गिफ्ट कार्ड से जुर्माना भरें।",
+          "तुरंत 972-555-0199 पर कॉल करें।"
+        ]
+      }
+    };
+    const FONT = '"Segoe UI", "Nirmala UI", "Noto Sans Devanagari", Roboto, system-ui, sans-serif';
+
+    function wrap(ctx, text, maxWidth) {
+      const lines = [];
+      let line = "";
+      for (const word of text.split(" ")) {
+        const test = line ? line + " " + word : word;
+        if (ctx.measureText(test).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else line = test;
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function draw(canvas, chat) {
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width, H = canvas.height;
+      // chat wallpaper
+      ctx.fillStyle = "#ECE5DD";
+      ctx.fillRect(0, 0, W, H);
+      // status bar + header
+      ctx.fillStyle = "#075E54";
+      ctx.fillRect(0, 0, W, 170);
+      ctx.fillStyle = "#fff";
+      ctx.font = `600 26px ${FONT}`;
+      ctx.fillText(chat.time, 30, 40);
+      ctx.fillText("▮▮▮ 87%", W - 150, 40);
+      ctx.font = `40px ${FONT}`;
+      ctx.fillText("←", 22, 122);
+      ctx.fillStyle = "#cfd8dc";
+      ctx.beginPath();
+      ctx.arc(110, 110, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `600 32px ${FONT}`;
+      ctx.fillText(chat.contact, 160, 106);
+      ctx.font = `24px ${FONT}`;
+      ctx.fillText(chat.ui.online, 160, 140);
+      // date chip
+      ctx.fillStyle = "#E1F3FB";
+      roundRect(ctx, W / 2 - 60, 200, 120, 44, 12);
+      ctx.fill();
+      ctx.fillStyle = "#555";
+      ctx.font = `24px ${FONT}`;
+      ctx.textAlign = "center";
+      ctx.fillText(chat.ui.today, W / 2, 230);
+      ctx.textAlign = "left";
+      // incoming bubbles
+      let y = 280;
+      ctx.font = `32px ${FONT}`;
+      for (const text of chat.bubbles) {
+        const lines = wrap(ctx, text, 540);
+        const h = lines.length * 44 + 56;
+        ctx.fillStyle = "#fff";
+        roundRect(ctx, 24, y, 600, h, 16);
+        ctx.fill();
+        ctx.fillStyle = "#111";
+        lines.forEach((l, i) => ctx.fillText(l, 48, y + 46 + i * 44));
+        ctx.fillStyle = "#888";
+        ctx.font = `22px ${FONT}`;
+        ctx.fillText(chat.time, 540, y + h - 14);
+        ctx.font = `32px ${FONT}`;
+        y += h + 22;
+      }
+      // input bar
+      ctx.fillStyle = "#fff";
+      roundRect(ctx, 20, H - 110, W - 140, 84, 42);
+      ctx.fill();
+      ctx.fillStyle = "#999";
+      ctx.fillText(chat.ui.input, 60, H - 58);
+      ctx.fillStyle = "#128C7E";
+      ctx.beginPath();
+      ctx.arc(W - 64, H - 68, 42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function download(canvas, name) {
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = name;
+      a.click();
+    }
+
+    draw(document.getElementById("es"), CHATS.es);
+    draw(document.getElementById("hi"), CHATS.hi);
+    document.getElementById("dl-es").onclick = () => download(document.getElementById("es"), "es-uscis-whatsapp.png");
+    document.getElementById("dl-hi").onclick = () => download(document.getElementById("hi"), "hi-ice-whatsapp.png");
+    // Headless use: ?dump=es puts the PNG data URL in the page so a script can save it.
+    const dump = new URLSearchParams(location.search).get("dump");
+    if (dump && CHATS[dump]) document.getElementById("out").textContent = document.getElementById(dump).toDataURL("image/png");
+  </script>
+</body>
+</html>

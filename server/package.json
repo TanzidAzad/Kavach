@@ -5,7 +5,9 @@
   "description": "Tiny proxy that holds the NVIDIA API key and forwards chat requests to NIM.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --env-file=.env index.js",
+    "smoke": "node --env-file=.env scripts/smoke.js",
+    "preflight": "node --env-file=.env scripts/preflight.js"
   },
   "dependencies": {
     "express": "^4.21.2"

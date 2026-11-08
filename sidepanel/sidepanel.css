@@ -202,9 +202,7 @@ li::marker { color: var(--grey); }
 .contact .phone { font-weight: 700; white-space: nowrap; }
 
 #help-block { margin-top: 14px; }
-.talk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 62px; padding: 8px 14px; }
-.talk-main { display: flex; align-items: center; gap: 8px; }
-.talk-sub { font-size: 13px; font-weight: 500; color: #bdc1c6; }
+.talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 58px; }
 .small { margin: 6px 0 0; font-size: 14px; color: var(--grey); text-align: center; }
 #voice-langs { display: block; }
 .info {
@@ -220,6 +218,7 @@ li::marker { color: var(--grey); }
   color: var(--grey);
 }
 .info[aria-expanded="true"] { color: var(--text); }
+.info:focus-visible { outline-width: 2px; outline-offset: 0; }
 .info:hover { background: none; color: var(--text); }
 .half-buttons { display: flex; gap: 10px; margin-top: 10px; }
 .half-buttons button { flex: 1; min-height: 50px; padding: 8px 10px; }
@@ -271,7 +270,7 @@ button.link.more:hover { text-decoration: underline; color: var(--text); }
   .todo-card .heading, .details .heading { margin-top: 10px; }
   li + li { margin-top: 3px; }
   #help-block { margin-top: 12px; }
-  .talk { min-height: 54px; padding: 6px 14px; }
+  .talk { min-height: 50px; }
   .half-buttons { margin-top: 10px; }
   .half-buttons button { min-height: 44px; }
 }

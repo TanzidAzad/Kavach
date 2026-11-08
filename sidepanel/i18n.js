@@ -40,7 +40,7 @@ export const DEFAULT_STRINGS = {
   officialContact: "Official contact:",
   call: "Call",
   website: "Website",
-  talkToKavach: "Talk to Kavach in your language",
+  cardTalk: "Talk to Kavach", // same words as Role 2's card, so the hand translations are shared
   speaksYourLanguage: "Speaks your language",
   stopTalking: "Stop",
   tellFamily: "Tell family",

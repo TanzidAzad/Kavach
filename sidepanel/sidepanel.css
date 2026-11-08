@@ -347,7 +347,8 @@ body.float .thinking { flex: none; min-height: 120px; }
 body.float .details { flex: none; max-height: var(--details-max, 420px); }
 body.float #start-view textarea { height: 110px; }
 body.float footer { padding-top: 14px; }
-body.float .sheet { position: static; margin: 10px 14px 0; border-radius: var(--tile-radius); box-shadow: none; }
+/* Sheets slide over the bottom in the floating panel too, so the panel never grows or scrolls */
+body.float .sheet { border-radius: 22px 22px 0 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.12); }
 
 /* ---------- Launcher (start view, also what the Kavach icon opens) ---------- */
 #check-page.big { min-height: 60px; margin-top: 4px; font-size: 19px; }
@@ -359,3 +360,18 @@ body.float .sheet { position: static; margin: 10px 14px 0; border-radius: var(--
 button.secondary { width: 100%; margin-top: 10px; background: var(--text); color: #fff; }
 button.secondary:hover { background: #3c4043; }
 body.float .paste-tile .upload, body.float .paste-tile .file-info { background: var(--fill); }
+
+/* ---------- Tell family: "How should we send it?" ---------- */
+#send-choices { display: flex; flex-direction: column; gap: 10px; }
+#send-choices > p { margin: 0 0 2px; }
+button.choice { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 56px; }
+.choice-ico { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; }
+.choice-ico.wa { background: #25D366; }    /* WhatsApp green */
+.choice-ico.imsg { background: #0A84FF; }  /* iMessage blue */
+.choice-ico.mail { background: var(--grey); }
+button.sheet-link { align-self: center; margin-top: 2px; color: var(--grey); }
+.send-qr { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.qr-box { width: min(230px, 62vw); aspect-ratio: 1; padding: 8px; border-radius: 16px; background: #fff; border: 1px solid var(--line); }
+.qr-box svg { display: block; width: 100%; height: 100%; }
+.qr-caption { margin: 12px 0 0; font-weight: 600; }
+.send-qr .small { margin-top: 4px; }

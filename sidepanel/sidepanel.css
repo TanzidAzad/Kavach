@@ -501,3 +501,21 @@ body.float button.tile-btn:hover {
 body.panel:not(.float) .tile-btn:hover { box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.25); }
 button.tile-btn:active:not(:disabled) { transform: translateY(0) scale(0.96); transition-duration: 90ms; }
 button.tile-btn:active .ico { transform: scale(0.95); }
+
+/* ✕, language pill, Upload screenshot: same hover feel as the tiles (lift / grow, brighten, soft shadow) */
+.icon-btn, select, .upload { transition: transform 260ms var(--spring), background-color 180ms ease, box-shadow 220ms ease, color 160ms ease; }
+.icon-btn:hover { transform: scale(1.08); color: var(--text); }
+select:hover, .upload:hover { transform: translateY(-1px); }
+body.float .icon-btn:hover,
+body.float select:hover,
+body.float .upload:hover,
+body.float .paste-tile .upload:hover {
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow: inset 0 1px 0 #fff, 0 6px 16px -6px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+body.panel:not(.float) .icon-btn:hover,
+body.panel:not(.float) select:hover,
+body.panel:not(.float) .upload:hover { box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.25); }
+.upload:hover svg, .upload:hover { color: var(--text); }
+button.icon-btn:active { transform: scale(0.92); transition-duration: 90ms; }
+select:active, .upload:active { transform: translateY(0) scale(0.96); transition-duration: 90ms; }

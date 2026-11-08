@@ -226,6 +226,24 @@ function renderContact(v) {
   el.hidden = !el.childNodes.length;
 }
 
+// Checklist lines are queued so each one appears ~300ms after the previous one,
+// even when several checks finish at the same moment (the agent runs some in parallel).
+const LINE_GAP_MS = 300;
+let lineQueue = Promise.resolve();
+let lastLineAt = 0;
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function queueChecklistLine(step, run) {
+  lineQueue = lineQueue.then(async () => {
+    if (run !== state.run) return;
+    await wait(Math.max(0, lastLineAt + LINE_GAP_MS - Date.now()));
+    if (run !== state.run) return;
+    addChecklistLine(step);
+    lastLineAt = Date.now();
+  });
+  return lineQueue;
+}
+
 function addChecklistLine(step) {
   // The line is added right away (keeps the order); its text is translated after.
   const li = document.createElement("li");
@@ -284,9 +302,14 @@ async function startDeepCheck() {
   $("checklist").replaceChildren();
 
   try {
+    lineQueue = Promise.resolve();
+    lastLineAt = 0;
     const v = await runDeepCheck({ text, imageDataUrl }, (step) => {
-      if (run === state.run && step) addChecklistLine(step);
+      if (run === state.run && step) queueChecklistLine(step, run);
     });
+    // Let every line appear, and the last one be seen, before showing the verdict.
+    await lineQueue;
+    await wait(LINE_GAP_MS);
     if (run !== state.run) return;
     renderVerdict(v);
     // The engine falls back to Quick Check when the server can't be reached.

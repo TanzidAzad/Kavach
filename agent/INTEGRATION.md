@@ -102,11 +102,11 @@ and the masked message. It never invents phone numbers or links; the only ones i
 `data/official_contacts.json`. The server holds the Gemini key (`POST /api/voice/token`); the extension never sees it.
 
 ```js
-import { startVoice, updateVerdict, speakFallback, stopFallback, fallbackText, VOICE_LANGUAGES } from "../agent/voice.js";
+import { startVoice, stopVoice, updateVerdict, speakFallback, stopFallback, fallbackText, VOICE_LANGUAGES } from "../agent/voice.js";
 ```
 | export | what it does |
 |---|---|
-| `startVoice({ verdict, lang, text }, { onState, onTranscript, onError, onMic })` | Starts talking. Returns `session` right away; `session.stop()` ends it. `verdict` = Verdict or `null` (talk mode). `lang` = popup language code (`"en"`, `"es"`, `"hi"`, `"zh"`, …). `text` = the message (masked again inside). |
+| `startVoice({ verdict, level, lang, text }, { onState, onTranscript, onError, onMic })` | Starts talking. Returns `session` right away; `session.stop()` ends it. The session is also awaitable: `await startVoice(...)` resolves when the talk ends and **rejects if live voice never connected** (→ call `speakFallback`). `level` = Role 2's `scamLevel(verdict)` (optional) so the voice says what the screen shows. `verdict` = Verdict or `null` (talk mode). `lang` = popup language code (`"en"`, `"es"`, `"hi"`, `"zh"`, …). `text` = the message (masked again inside). |
 | `onState(s)` | `"connecting"` → `"speaking"` ⇄ `"listening"` → `"ended"` (after stop) or `"error"`. |
 | `onTranscript({ role, text, final })` | `role` = `"kavach"` or `"user"`. `text` is the **whole line so far**: replace the last line of that role until `final: true`, then start a new line. |
 | `onError(err)` | Couldn't connect within 5 s, server down, no internet, connection lost. `onState("error")` fires too. → use `speakFallback`. |
@@ -115,6 +115,8 @@ import { startVoice, updateVerdict, speakFallback, stopFallback, fallbackText, V
 | `speakFallback(text, lang)` | Offline browser voice (Chrome speechSynthesis). `text` must already be in that language. Resolves `true` when done, `false` if there is no voice for that language (then just show the text). `stopFallback()` stops it. |
 | `fallbackText(verdict)` | Short **English** script for the fallback ("Take a breath. You have time. This message is a scam. …"). Translate it first (same as reasons). |
 | `VOICE_LANGUAGES` | `[{ code, name, native, tts }]`, e.g. `{ code: "es", name: "Spanish", native: "Español", tts: "es-US" }`. All 4 popup languages are in it. |
+
+`stopVoice()` stops whatever is talking (live voice or fallback speech). The side panel (`sidepanel/sidepanel.js` on `ui`) already uses exactly this.
 
 **Rules:** call `startVoice` directly inside the click handler (Chrome only lets audio play after a click).
 Only one session at a time: `stop()` the old one first. Show a Stop button while a session runs.

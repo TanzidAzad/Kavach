@@ -8,7 +8,7 @@ native tool calling, hosted key, vision, server, Spanish text + screenshot Deep 
 After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on the slide. Median 2.9 s, p90 ≤5.3 s, 0 fallbacks.
 
 ## Voice — "Talk to Kavach" (Gemini Live = voice, Nemotron verdict = brain) — 2026-11-08
-**Files:** `agent/voice.js` (startVoice / updateVerdict / speakFallback / stopFallback / fallbackText / VOICE_LANGUAGES),
+**Files:** `agent/voice.js` (startVoice / stopVoice / updateVerdict / speakFallback / stopFallback / fallbackText / VOICE_LANGUAGES),
 `agent/voicePrompt.js` (grounded system instruction; shared by server + browser), `agent/pcm-worklet.js` (mic → PCM),
 `agent/mic-permission.html/.js`, `server/index.js` → `POST /api/voice/token`. For Role 1: `agent/INTEGRATION.md` (Voice).
 **Tests:** `node agent/test/voice_smoke.mjs <lang> [talk]` (Node, no mic: token → Live → BEGIN → out-of-scope
@@ -95,6 +95,7 @@ cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach
 
 
 ## Done
+- 2026-11-08: voice.js matches the side panel's call (`await voice.startVoice({verdict, level, lang, text})` + `stopVoice?.()`): session is awaitable (resolves on end, rejects if never connected → panel falls back), `level` goes into the grounded facts ("What the screen shows: …"), `stopVoice()` added. Test: `node agent/test/voice_contract.test.mjs` (5/5), voice_smoke en OK.
 - 2026-11-08 full test run on merged main (Brev): core tests 4/4 · preflight 8/8 · run_deep.mjs 2 32/32 · eval Deep 39/40
   (miss t-hi-07 unknown link, no agency → safe/unsure) · popup_e2e 9/9 (Hindi reasons now translate as full sentences).
   Fixed: preflight "real number" check now skips verdict.officialContact (the official USCIS phone from data/ is

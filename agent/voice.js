@@ -1,6 +1,8 @@
 // agent/voice.js — Role 3 (Agent & Backend)
 // Voice helper: Gemini Live is the VOICE, the Kavach verdict (Nemotron Deep Check / Quick Check) is the BRAIN.
-// Contract (team): startVoice({ verdict, lang, text }, { onState, onTranscript, onError }) → session { stop() }
+// Contract (team): startVoice({ verdict, level, lang, text }, { onState, onTranscript, onError }) → session { stop() }
+//                  The session is also awaitable: `await startVoice(...)` resolves when the talk ends and REJECTS if
+//                  live voice never connected (→ caller uses speakFallback). stopVoice() stops whatever is talking.
 //                  updateVerdict(session, verdict) · speakFallback(text, lang) · VOICE_LANGUAGES
 //
 // - Key never in the extension: POST /api/voice/token returns a single-use Gemini token that is LOCKED to the Live
@@ -87,14 +89,32 @@ async function getMic(session) {
 }
 
 // ---------------- session ----------------
-export function startVoice({ verdict = null, lang = "en", text = "" } = {}, { onState = () => {}, onTranscript = () => {}, onError = () => {}, onMic = () => {} } = {}) {
+let current = null; // the one live session (stopVoice / starting a new one ends it)
+
+export function stopVoice() {
+  try { current && current.stop(); } catch {}
+  current = null;
+  stopFallback();
+}
+
+export function startVoice({ verdict = null, level = null, lang = "en", text = "" } = {}, { onState = () => {}, onTranscript = () => {}, onError = () => {}, onMic = () => {} } = {}) {
+  if (verdict && level && typeof verdict === "object") verdict = { ...verdict, level };
+  if (current) { try { current.stop(); } catch {} }
   const L = voiceLanguage(lang);
+  let settle;
+  const done = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+  done.catch(() => {}); // no "unhandled rejection" noise when the caller doesn't await
   const session = {
     lang: L.code, state: "connecting", ended: false, ready: false, hasVerdict: !!verdict,
     _pending: [], _official: null,
     stop: () => end("ended"),
+    done,
+    then: (a, b) => done.then(a, b),
+    catch: (b) => done.catch(b),
+    finally: (f) => done.finally(f),
     _micNote: (m) => { try { onMic(m); } catch {} },
   };
+  current = session;
   let ws = null, micStream = null, inCtx = null, worklet = null, outCtx = null, nextAt = 0;
   const playing = new Set();
   let modelTurnDone = true, outText = "", userText = "", guarded = false, connectTimer = null;
@@ -116,10 +136,14 @@ export function startVoice({ verdict = null, lang = "en", text = "" } = {}, { on
     if (session.ended) return;
     session.ended = true;
     cleanup();
+    if (current === session) current = null;
+    const e = err instanceof Error ? err : new Error(String(err || "voice error"));
     if (state === "error") {
       setState("error");
-      try { onError(err instanceof Error ? err : new Error(String(err || "voice error"))); } catch {}
+      try { onError(e); } catch {}
     } else setState("ended");
+    // Never connected → reject so `await startVoice()` callers fall back. Dropped mid-talk → just finish.
+    if (state === "error" && !session.ready) settle.reject(e); else settle.resolve();
   }
   const fail = (err) => end("error", err);
 

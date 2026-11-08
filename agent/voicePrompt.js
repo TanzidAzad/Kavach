@@ -70,6 +70,9 @@ async function trustedContact(c) {
 }
 
 // Only whitelisted, cleaned fields survive. Returns null for anything that isn't a verdict.
+// Role 2's scamLevel(verdict) (core/level.js) — the side panel passes it so the voice says the same thing.
+const LEVEL_WORDS = { highly_likely: "highly likely a scam", likely: "likely a scam", unsure: "not sure", unlikely: "unlikely to be a scam (but Kavach cannot be fully sure)" };
+
 export async function cleanVerdict(v) {
   if (!v || typeof v !== "object" || !MEANING[v.verdict]) return null;
   const fam = cleanText(String(v.familyMessage || "").slice(0, 600));
@@ -80,6 +83,7 @@ export async function cleanVerdict(v) {
     steps: cleanList(v.steps, 3),
     officialContact: await trustedContact(v.officialContact),
     familyMessage: fam && !/\[[A-Z]+_\d+\]/.test(fam) ? fam : "",
+    level: LEVEL_WORDS[v.level] ? v.level : null,
   };
 }
 
@@ -94,6 +98,7 @@ export function verdictFacts(v) {
   const c = v.officialContact;
   const lines = [
     `Result: ${MEANING[v.verdict]} (Kavach's confidence: ${v.confidence}.)`,
+    v.level ? `What the screen shows: ${LEVEL_WORDS[v.level]}.` : "",
     "Why:", ...v.reasons.map((r) => "- " + r),
     "What to do:", ...v.steps.map((s) => "- " + s),
     c ? `Official contact (from Kavach's verified list): ${c.agency}` + (c.phone ? `, phone ${c.phone}` : "") + (c.url ? `, website ${c.url}` : "")

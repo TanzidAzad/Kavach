@@ -49,7 +49,7 @@ function showStart(problemKey = null) {
   $("problem").hidden = !problemKey;
   if (problemKey) setText($("problem"), t(problemKey));
   setStatus("");
-  $("message").focus();
+  updateCheckButton();
 }
 
 // While checking, only the small "thinking" lines show.
@@ -360,7 +360,19 @@ $("ftc").addEventListener("click", async () => {
   if (url) chrome.tabs.create({ url: url.href });
 });
 
-// ---------- Start screen ----------
+// ---------- Start screen = launcher ----------
+
+// "Check this page": background.js reads the page this panel sits on (or the active tab, in the side panel).
+$("check-page").addEventListener("click", () => {
+  showChecking("readingPage");
+  chrome.runtime.sendMessage({ type: "KAVACH_READ_TAB", mode: "check" }).catch(() => showStart("cantReadPage"));
+});
+
+// "Check this message" only shows once something is pasted or uploaded.
+function updateCheckButton() {
+  $("check").hidden = !$("message").value.trim() && !state.imageDataUrl;
+}
+$("message").addEventListener("input", updateCheckButton);
 
 $("check").addEventListener("click", () => {
   const text = $("message").value.trim();
@@ -379,6 +391,7 @@ function setScreenshot(file) {
     $("upload-label").hidden = true;
     $("file-info").hidden = false;
     $("image-note").hidden = false;
+    updateCheckButton();
   };
   reader.readAsDataURL(file);
 }
@@ -388,6 +401,7 @@ function clearScreenshot() {
   $("upload-label").hidden = false;
   $("file-info").hidden = true;
   $("image-note").hidden = true;
+  updateCheckButton();
 }
 $("screenshot").addEventListener("change", (e) => setScreenshot(e.target.files?.[0]));
 $("remove-file").addEventListener("click", clearScreenshot);
@@ -399,6 +413,7 @@ $("message").addEventListener("paste", (e) => {
   }
 });
 
+// "Check another message" → back to the launcher.
 $("again").addEventListener("click", () => {
   $("message").value = "";
   clearScreenshot();

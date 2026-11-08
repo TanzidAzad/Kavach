@@ -20,9 +20,11 @@ const MAX_TEXT = 20000;
 
 // ---------- Floating panel ----------
 
-async function showFloat(tabId) {
+// toggle: true = the Kavach icon was clicked → close the panel if it's already open (like Control Center).
+async function showFloat(tabId, { toggle = false } = {}) {
   if (tabId == null) return false;
   try {
+    await chrome.scripting.executeScript({ target: { tabId }, func: (t) => { window.__kavachToggle = t; }, args: [toggle] });
     await chrome.scripting.executeScript({ target: { tabId }, files: ["sidepanel/float.js"] });
     return true;
   } catch (err) {
@@ -30,6 +32,21 @@ async function showFloat(tabId) {
     return false; // page we can't draw on
   }
 }
+
+// Kavach icon in the toolbar → floating launcher (Check this page / paste / upload).
+// Pages we can't draw on (chrome://, Web Store, PDF viewer…) → side panel instead, opened right away in the click.
+const CAN_FLOAT = /^(https?|file):/i;
+chrome.action.onClicked.addListener((tab) => {
+  if (tab?.id == null) return;
+  if (!CAN_FLOAT.test(tab.url || "")) {
+    openPanel({ tabId: tab.id, windowId: tab.windowId }).catch(() => {});
+    return;
+  }
+  chrome.storage.session.remove("pendingCheck").catch(() => {}); // start fresh
+  showFloat(tab.id, { toggle: true }).then((ok) => {
+    if (!ok) openPanel({ tabId: tab.id, windowId: tab.windowId }).catch(() => fallback(tab.id));
+  });
+});
 
 // ---------- Opening the side panel (backup) ----------
 
@@ -190,11 +207,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg?.type === "KAVACH_READ_TAB") {
-    chrome.runtime.sendMessage({ type: "KAVACH_READING" }).catch(() => {}); // panel shows "Reading the page…"
-    readTab(msg.tabId)
-      .then((text) => savePending({ text, url: msg.url, mode: msg.mode, problem: text ? null : "cantReadPage" }))
-      .catch(() => savePending({ text: "", url: msg.url, mode: msg.mode, problem: "cantReadPage" }))
-      .then(() => showFloat(msg.tabId))
+    // From the floating panel: sender.tab is the page it sits on. From the side panel: the active tab.
+    const target = msg.tabId != null
+      ? Promise.resolve({ id: msg.tabId, url: msg.url })
+      : sender.tab
+        ? Promise.resolve(sender.tab)
+        : chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([t]) => t || {});
+    target
+      .then((tab) =>
+        readTab(tab.id)
+          .then((text) => savePending({ text, url: tab.url, mode: msg.mode, problem: text ? null : "cantReadPage" }))
+          .catch(() => savePending({ text: "", url: tab.url, mode: msg.mode, problem: "cantReadPage" }))
+          .then(() => !!sender.tab) // the panel that asked picks the check up by itself
+      )
       .then((floated) => sendResponse({ ok: true, floated }));
     return true;
   }

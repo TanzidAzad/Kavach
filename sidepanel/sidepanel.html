@@ -24,21 +24,25 @@
 
   <!-- The page never scrolls: everything fits the panel's height. -->
   <main>
-    <!-- Start: shown when the panel is opened with nothing to check -->
+    <!-- Start = launcher (same as clicking the Kavach icon): check this page, or paste / upload -->
     <section id="start-view" class="view" hidden>
       <p id="problem" class="problem" role="alert" hidden></p>
-      <textarea id="message" data-i18n-placeholder="pasteMessage" placeholder="Paste a message…"></textarea>
-      <div class="upload-row">
-        <label class="upload" id="upload-label">📎 <span data-i18n="uploadScreenshot">Upload screenshot</span>
-          <input id="screenshot" type="file" accept="image/*" hidden>
-        </label>
-        <span id="file-info" class="file-info" hidden>
-          📎 <span data-i18n="screenshotAdded">Screenshot added</span>
-          <button id="remove-file" class="link" type="button" aria-label="Remove screenshot">✕</button>
-        </span>
+      <button id="check-page" class="primary big" type="button" data-i18n="checkThisPage">Check this page</button>
+      <div class="paste-tile tile">
+        <textarea id="message" data-i18n-placeholder="pasteMessage" placeholder="Paste a message…"></textarea>
+        <div class="upload-row">
+          <label class="upload" id="upload-label">📎 <span data-i18n="uploadScreenshot">Upload screenshot</span>
+            <input id="screenshot" type="file" accept="image/*" hidden>
+          </label>
+          <span id="file-info" class="file-info" hidden>
+            📎 <span data-i18n="screenshotAdded">Screenshot added</span>
+            <button id="remove-file" class="link" type="button" aria-label="Remove screenshot">✕</button>
+          </span>
+        </div>
+        <p id="image-note" class="note" data-i18n="screenshotNote" hidden></p>
+        <!-- Appears only once there's something pasted or uploaded -->
+        <button id="check" type="button" class="secondary" data-i18n="checkMessage" hidden>Check this message</button>
       </div>
-      <p id="image-note" class="note" data-i18n="screenshotNote" hidden></p>
-      <button id="check" class="primary" type="button" data-i18n="check">Check</button>
     </section>
 
     <section id="result-view" class="view" hidden>

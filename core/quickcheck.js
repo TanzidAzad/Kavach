@@ -13,6 +13,7 @@ import {
   searchGuidance,
   matchRedFlags
 } from "./tools.js";
+import { checkSensitiveInfo, findSensitiveRequests } from "./sensitive.js";
 import { loadData } from "./data.js";
 
 const SUPPORTED_LANGS = ["en", "es", "hi", "zh"];
@@ -155,10 +156,37 @@ export function extractDetails(text) {
   };
 }
 
+// ---------- 2b. Warning sentences ----------
+// Real agency emails and scam-alert newsletters say things like "The IRS will never ask for
+// gift cards" or "Scammers may threaten deportation". Those sentences WARN about scams, so we
+// skip them when looking for payment words and scam phrases (otherwise real IRS emails look like scams).
+// A scam that copies such a sentence is still caught by its other sentences ("pay with gift cards today").
+const WARNING_SENTENCE = [
+  // "<who> will never / does not ask|call|demand…"
+  /\b(?:never|(?:does|do|will|would) not|doesn'?t|don'?t|won'?t)\s+(?:\w+\s+){0,2}?(?:ask|call|demand|request|accept|take|threaten|initiate|contact|email|text|send|require)/i,
+  // advice: "never pay with…", "do not pay by…"
+  /\b(?:never|do not|don'?t)\s+(?:pay|send money|wire|buy)\b/i,
+  // talking ABOUT scammers: "Scammers pretend…", "They might say…"
+  /\b(?:scammers?|fraudsters?|criminals|con artists|they)\s+(?:may|might|could|often|can|will|pretend|claim|say|use|ask|threaten)\b/i,
+  /\b(?:watch out|beware|avoid (?:scams|fraud)|report (?:scams|fraud|it)|scam alert|consumer alert)\b/i,
+  /\bnunca\s+(?:le |les |te )?(?:pedir|pide|solicit|llamar|llama|aceptar|acepta|exigir|exige|amenaz|pague|env[ií]e)|\blos estafadores\b/i,
+  /कभी (?:भी )?नहीं|कभी न|धोखेबाज़|धोखेबाज|ठग/,
+  /绝不会|从不|不会要求|不会.{0,6}(?:要求|打电话|收取)|骗子|诈骗分子|切勿|千万不要/
+];
+
+export function stripWarnings(text) {
+  return String(text ?? "")
+    // split into sentences, and also at ":", ";" and "but" ("never asks for gift cards, but pay…")
+    .split(/(?<=[.!?。！？।\n:;：；])|(?=,?\s+(?:but|pero|however|sin embargo)\b)|(?=[，,]\s*(?:但是|但|可是|लेकिन))/i)
+    .filter((sentence) => !WARNING_SENTENCE.some((re) => re.test(sentence)))
+    .join("");
+}
+
 // ---------- 3 + 4. Run tools, score, build the Verdict ----------
 
 // Order reasons are shown in (strongest evidence first).
 const REASON_ORDER = [
+  "check_sensitive_info",
   "check_official_contact",
   "check_lookalike_domain",
   "validate_case_number",
@@ -168,15 +196,19 @@ const REASON_ORDER = [
 // Only show a phone number if it's a real one (data may still say "TODO").
 const looksLikePhone = (p) => typeof p === "string" && /\d{3}/.test(p) && !/todo/i.test(p);
 
-function buildSteps(verdict, contact) {
+function buildSteps(verdict, contact, asksPrivate) {
   if (verdict === "safe") {
     return contact
       ? [`To be sure, check with ${contact.agency} directly at ${contact.url}`]
       : ["If anything feels wrong, ask someone you trust before you act"];
   }
-  const steps = ["Do not pay, reply, or click any links in the message"];
+  const steps = asksPrivate
+    ? ["Do not send your card, bank, or login details, and do not click any links"]
+    : ["Do not pay, reply, or click any links in the message"];
   if (contact) {
     steps.push(`Check with ${contact.agency} yourself at ${contact.url}`);
+  } else if (asksPrivate) {
+    steps.push("If you are worried, call your bank using the number on the back of your card");
   } else {
     steps.push("Contact the agency yourself using its official website, not the message");
   }
@@ -198,7 +230,12 @@ function buildFamilyMessage(verdict, agency) {
 export async function runQuickCheck(text) {
   const input = String(text ?? "").trim();
   const lang = await detectLanguage(input);
-  const d = extractDetails(input);
+  // Agency, links and case number come from the whole message. Payment and channel words
+  // come only from sentences that aren't scam warnings ("IRS will never ask for gift cards").
+  const scored = stripWarnings(input);
+  const full = extractDetails(input);
+  const fromScored = extractDetails(scored);
+  const d = { ...full, channel: fromScored.channel, paymentMethod: fromScored.paymentMethod };
 
   // Run the tools. Order here = order shown in the trace.
   const trace = [];
@@ -215,10 +252,13 @@ export async function runQuickCheck(text) {
   } else {
     for (const url of d.urls) trace.push(await checkLookalikeDomain(url));
   }
-  trace.push(await findRedFlags(input, lang));
+  trace.push(await findRedFlags(scored, lang));
+  // Asking for card / bank / SSN / codes. Each KIND asked for is one warning sign.
+  trace.push(await checkSensitiveInfo(input));
+  const sensitiveSigns = findSensitiveRequests(input).length;
 
   // Guidance query: agency + payment + matched red-flag phrases.
-  const flags = await matchRedFlags(input, lang).catch(() => []);
+  const flags = await matchRedFlags(scored, lang).catch(() => []);
   const query = [d.agency, d.paymentMethod, ...flags.map((f) => f.phrase)].filter(Boolean).join(" ");
   const guidance = await searchGuidance(query);
   trace.push(guidance);
@@ -229,12 +269,13 @@ export async function runQuickCheck(text) {
   //  - guidance doesn't count — it only repeats what the other tools found
   const failedTools = new Set(
     trace
-      .filter((r) => r.status === "fail" && r.tool !== "search_guidance" && r.tool !== "find_red_flags")
+      .filter((r) => r.status === "fail" && !["search_guidance", "find_red_flags", "check_sensitive_info"].includes(r.tool))
       .map((r) => r.tool)
   );
   const redFlagFailed = trace.some((r) => r.tool === "find_red_flags" && r.status === "fail");
   const redFlagSigns = redFlagFailed ? Math.max(1, new Set(flags.map((f) => f.reason)).size) : 0;
-  const fails = failedTools.size + redFlagSigns;
+  // Asking for 1 private detail → at least suspicious; 2+ (e.g. card number + CVC) → scam, even with no agency.
+  const fails = failedTools.size + redFlagSigns + sensitiveSigns;
   const verdict = fails >= 2 ? "scam" : fails === 1 ? "suspicious" : "safe";
   const confidence = fails >= 2 ? "high" : fails === 1 ? "medium" : "unsure"; // never "safe/high"
 
@@ -287,10 +328,13 @@ export async function runQuickCheck(text) {
     verdict,
     confidence,
     reasons,
-    steps: buildSteps(verdict, officialContact),
+    steps: buildSteps(verdict, officialContact, sensitiveSigns > 0),
     officialContact,
     trace,
     mode: "quick",
     familyMessage: buildFamilyMessage(verdict, d.agency)
   };
 }
+
+// Also available from here, so the popup can import everything from one file.
+export { scamLevel } from "./level.js";

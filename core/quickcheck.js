@@ -71,11 +71,13 @@ const CASE_WORD_RE =
 
 // Agency names in English, Spanish, Hindi and Chinese.
 const AGENCY_PATTERNS = {
-  USCIS: /uscis|citizenship and immigration|servicios? de ciudadan[ií]a|यूएससीआईएस|移民局/i,
+  USCIS: /uscis|citizenship and immigration|immigration (?:department|office)|servicios? de ciudadan[ií]a|departamento de inmigraci[oó]n|oficina de inmigraci[oó]n|यूएससीआईएस|इमिग्रेशन विभाग|移民局/i,
   ICE: /\bICE\b|immigration and customs enforcement|inmigraci[oó]n y control de aduanas|आईसीई|移民海关执法局/,
   IRS: /\bIRS\b|internal revenue service|servicio de impuestos internos|आईआरएस|国税局/i,
   FTC: /\bFTC\b|federal trade commission|comisi[oó]n federal de comercio|联邦贸易委员会/i,
-  SSA: /\bSSA\b|social security|seguro social|सामाजिक सुरक्षा|社会安全局|社会保障/i
+  SSA: /\bSSA\b|social security|seguro social|सामाजिक सुरक्षा|सोशल सिक्योरिटी|社会安全|社会保障/i,
+  // Visa lottery scams pretend to be the State Department.
+  "State Department": /state department|department of state|departamento de estado|\bDV-?20\d\d\b|visa lottery|loter[ií]a de visas|वीज़ा लॉटरी|绿卡抽签/i
 };
 
 // Messaging apps that real agencies don't use to contact people.
@@ -89,12 +91,25 @@ const CHANNEL_PATTERNS = {
   Instagram: /instagram/i
 };
 
-// Payment types agencies never ask for (names match data/official_contacts.json).
+// Payment types agencies never ask for. The key is the English name shown in reasons
+// (e.g. "USCIS never asks for payment by Zelle").
 const PAYMENT_PATTERNS = {
-  "gift card": /gift\s?cards?|itunes|google play card|tarjetas? de regalo|गिफ्ट कार्ड|礼品卡|购物卡/i,
-  crypto: /bitcoin|crypto|cripto|比特币|加密货币|बिटकॉइन|क्रिप्टो/i,
-  "wire transfer": /wire transfer|western union|moneygram|transferencia bancaria|电汇|वायर ट्रांसफर/i
+  "gift cards": /gift\s?cards?|itunes|google play|tarjetas? (?:de regalo|google play|itunes)|गिफ्ट कार्ड|礼品卡|购物卡/i,
+  cryptocurrency: /bitcoin|crypto|cripto|比特币|加密货币|बिटकॉइन|क्रिप्टो/i,
+  "Western Union": /western union|वेस्टर्न यूनियन|西联/i,
+  MoneyGram: /moneygram|मनीग्राम|速汇金/i,
+  "wire transfer": /wire transfer|transferencia|电汇|转账|वायर ट्रांसफर/i,
+  Zelle: /zelle/i,
+  Venmo: /venmo/i,
+  PayPal: /paypal/i,
+  "Cash App": /cash\s?app/i
 };
+
+// Any payment word, used so reasons mention payment only once.
+const ANY_PAYMENT_RE = new RegExp(
+  Object.values(PAYMENT_PATTERNS).map((re) => re.source).join("|") + "|payment app|cryptocurrency",
+  "i"
+);
 
 // Returns the name whose pattern appears earliest in the text, or null.
 function firstMatch(patterns, text) {
@@ -201,12 +216,18 @@ export async function runQuickCheck(text) {
   const guidance = await searchGuidance(query);
   trace.push(guidance);
 
-  // Score: count how many DIFFERENT tools found a red flag.
-  // Guidance doesn't count — it only repeats what the other tools found.
+  // Score: count DIFFERENT warning signs.
+  //  - each tool that failed counts once (3 bad links = 1 sign)
+  //  - for red-flag phrases, each different reason counts (threat + deadline + bitcoin = 3 signs)
+  //  - guidance doesn't count — it only repeats what the other tools found
   const failedTools = new Set(
-    trace.filter((r) => r.status === "fail" && r.tool !== "search_guidance").map((r) => r.tool)
+    trace
+      .filter((r) => r.status === "fail" && r.tool !== "search_guidance" && r.tool !== "find_red_flags")
+      .map((r) => r.tool)
   );
-  const fails = failedTools.size;
+  const redFlagFailed = trace.some((r) => r.tool === "find_red_flags" && r.status === "fail");
+  const redFlagSigns = redFlagFailed ? Math.max(1, new Set(flags.map((f) => f.reason)).size) : 0;
+  const fails = failedTools.size + redFlagSigns;
   const verdict = fails >= 2 ? "scam" : fails === 1 ? "suspicious" : "safe";
   const confidence = fails >= 2 ? "high" : fails === 1 ? "medium" : "unsure"; // never "safe/high"
 
@@ -220,8 +241,25 @@ export async function runQuickCheck(text) {
     const failed = trace
       .filter((r) => r.status === "fail" && r.tool !== "search_guidance")
       .sort((a, b) => REASON_ORDER.indexOf(a.tool) - REASON_ORDER.indexOf(b.tool));
-    if (guidance.status === "fail") failed.push(guidance);
-    reasons = [...new Set(failed.map((r) => r.detail))].slice(0, 3);
+    // Candidate reasons, strongest first. For red flags, list each phrase's reason
+    // separately, so if the first one repeats another reason we can use the next one.
+    const candidates = [];
+    for (const r of failed) {
+      if (r.tool === "find_red_flags" && flags.length) candidates.push(...flags.map((f) => f.reason));
+      else candidates.push(r.detail);
+    }
+    if (guidance.status === "fail") candidates.push(guidance.detail);
+
+    // Mention payment only once ("gift cards" in reason 1 and 3 reads as repetition).
+    let paymentMentioned = false;
+    for (const reason of candidates) {
+      if (reasons.length === 3) break;
+      if (reasons.includes(reason)) continue;
+      const aboutPayment = ANY_PAYMENT_RE.test(reason);
+      if (aboutPayment && paymentMentioned) continue;
+      if (aboutPayment) paymentMentioned = true;
+      reasons.push(reason);
+    }
   }
 
   // Official contact: ONLY copied from data/official_contacts.json, never invented.

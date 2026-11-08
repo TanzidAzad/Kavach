@@ -256,7 +256,8 @@ export async function findRedFlags(text, lang = "en") {
     if (found.length === 0) {
       return result(TOOL, "pass", LABEL, "No common scam phrases found");
     }
-    const more = found.length > 1 ? ` (and ${found.length - 1} more warning signs)` : "";
+    const extra = found.length - 1;
+    const more = extra === 1 ? " (and 1 more warning sign)" : extra > 1 ? ` (and ${extra} more warning signs)` : "";
     return result(TOOL, "fail", LABEL, found[0].reason + more);
   });
 }

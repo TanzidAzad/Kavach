@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kavach — Microphone</title>
+<style>
+  :root { --text: #202124; --grey: #5f6368; --line: #dadce0; --safe: #188038; --scam: #D93025; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: #fff; }
+  main { max-width: 420px; margin: 12vh auto; padding: 0 16px; text-align: center; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { color: var(--grey); margin: 8px 0 20px; }
+  button { font: inherit; font-weight: 600; padding: 12px 28px; border-radius: 8px; border: 0; background: var(--text); color: #fff; cursor: pointer; }
+  #status { margin-top: 20px; min-height: 1.5em; }
+  .ok { color: var(--safe); } .bad { color: var(--scam); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🛡 Let Kavach hear you</h1>
+  <p>To talk to Kavach, Chrome needs your permission to use the microphone. Click the button, then choose <b>Allow</b>.</p>
+  <button id="allow">Allow microphone</button>
+  <div id="status" role="status"></div>
+</main>
+<script src="mic-permission.js"></script>
+</body>
+</html>

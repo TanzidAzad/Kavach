@@ -7,7 +7,95 @@ native tool calling, hosted key, vision, server, Spanish text + screenshot Deep 
 0/12 safe called scam** (blind run, before tuning) · Quick Check 24/40, 18/20 · phrase baseline 19/40, 15/20.
 After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on the slide. Median 2.9 s, p90 ≤5.3 s, 0 fallbacks.
 
+## Voice — "Talk to Kavach" (Gemini Live = voice, Nemotron verdict = brain) — 2026-11-08
+**Files:** `agent/voice.js` (startVoice / stopVoice / updateVerdict / speakFallback / stopFallback / fallbackText / VOICE_LANGUAGES),
+`agent/voicePrompt.js` (grounded system instruction; shared by server + browser), `agent/pcm-worklet.js` (mic → PCM),
+`agent/mic-permission.html/.js`, `server/index.js` → `POST /api/voice/token`. For Role 1: `agent/INTEGRATION.md` (Voice).
+**Tests:** `node agent/test/voice_smoke.mjs <lang> [talk]` (Node, no mic: token → Live → BEGIN → out-of-scope
+question; fails on any number/link not from data; `WAV=dir` saves audio) · `agent/test/voice_e2e.mjs` (real Chrome over
+CDP, fake silent mic, run like popup_e2e — see below) · `agent/test/voice.html` (manual) · preflight check #9.
+**Results:** voice_smoke en / es / hi / es-talk all ✅ (only number spoken = USCIS 800-375-5283 from data; asked for "the ICE
+number" → "I don't know, check the official USCIS contact"). voice_e2e **13/13** (first audio 1.7–2.3 s after click,
+talk mode no verdict before updateVerdict, server down → error in 0.1 s + fallback, mic-permission tab → mic on, no
+console errors). run_deep.mjs 1 ALL PASSED · preflight 9/9 (voice connect 423 ms).
+```bash
+# voice_e2e (WSL + Windows Chrome, headless, silent fake mic). Server must have the voice endpoint.
+W=/mnt/c/Users/Rafid/AppData/Local/Temp; D=$W/kavach_ext; rm -rf $D; mkdir -p $D; cp -r manifest.json popup core data agent $D/
+# kv_silence.wav = 60 s of 16 kHz silence (any silent WAV works)
+"/mnt/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --remote-debugging-port=9335 --enable-unsafe-extension-debugging \
+  --user-data-dir='C:\Users\Rafid\AppData\Local\Temp\kv_voice_prof' --no-first-run --autoplay-policy=no-user-gesture-required \
+  --use-fake-device-for-media-stream --use-file-for-fake-audio-capture='C:\Users\Rafid\AppData\Local\Temp\kv_silence.wav' about:blank &
+cd $W && CDP=http://127.0.0.1:9335 EXT='C:\Users\Rafid\AppData\Local\Temp\kavach_ext' SERVER=http://localhost:8787 WSLENV=CDP:EXT:SERVER \
+  "/mnt/c/Program Files/nodejs/node.exe" '\\wsl.localhost\Ubuntu\home\rafid\hackutd\Kavach\agent\test\voice_e2e.mjs'
+```
+
+### Research (Gemini Live API, checked 2026-11-08 — ai.google.dev now 301s to aistudio.google.com/docs)
+- **Model:** `gemini-3.8-live` = "Default Live API model for most low-latency voice agent experiences" (native audio).
+  `gemini-3.8-live-extended-thinking` (slower, reasoning). `gemini-3.1-flash-live-preview` = legacy ("we recommend
+  updating to Gemini 3.8 Live"). `gemini-2.5-flash-native-audio-preview-12-2025` still listed, limited access.
+  We use `gemini-3.8-live` (`GEMINI_LIVE_MODEL` in .env to override). No `thinkingLevel` on it; proactive audio is
+  always on; affective dialog removed. — https://ai.google.dev/gemini-api/docs/models
+- **Ephemeral tokens (Preview, Live API only):** `POST https://generativelanguage.googleapis.com/v1beta/auth_tokens`,
+  header `x-goog-api-key`, body `{ uses, expireTime, newSessionExpireTime, bidiGenerateContentSetup: {…} }` → token in
+  `name`. Defaults: expire 30 min (max 20 h), new-session window 1 min, uses 1. **Tested:** the docs' guide says
+  `liveConnectConstraints` → API answers 400 "Unknown name"; the API reference's `bidiGenerateContentSetup` works.
+  Client: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=<token>`.
+  — https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens · https://ai.google.dev/api/live
+- **Tested:** with an ephemeral token, a `systemInstruction` sent by the client is **ignored**; the one locked in the
+  token is used (forum reports the same: discuss.ai.google.dev "Live API with ephemeral token ignores the
+  system_instruction"). → we build the instruction on the server and lock it in. Good for safety: the extension
+  can't change the rules.
+- **Wire format:** first message `{ setup: { model: "models/…" } }` → wait for `setupComplete`. Mic:
+  `{ realtimeInput: { audio: { data: <base64 PCM16 LE 16 kHz>, mimeType: "audio/pcm;rate=16000" } } }`,
+  `{ realtimeInput: { audioStreamEnd: true } }` at stop. Text: `{ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } }`.
+  Server: `serverContent.modelTurn.parts[].inlineData` (`audio/pcm;rate=24000`), `inputTranscription` / `outputTranscription`
+  `.text`, `turnComplete`, `interrupted` (barge-in → stop playback), `goAway`. Frames arrive as **binary** (JSON in
+  them) → `binaryType = "arraybuffer"` + TextDecoder (Blob.text() would reorder audio). — https://ai.google.dev/api/live
+- **Languages:** native audio picks the language itself; `languageCode` NOT supported → set it in the system
+  instruction. 99 languages incl. en, es, hi, zh-Hans/zh-Hant, vi, ar, ko, fil, … Voices = the TTS voices
+  (`prebuiltVoiceConfig.voiceName`); we use `Sulafat` ("warm"; `GEMINI_VOICE` to change). Native audio sessions
+  ≈15 min max. — https://ai.google.dev/gemini-api/docs/live-api/capabilities · https://ai.google.dev/gemini-api/docs/live-api/best-practices
+
+### Voice decisions
+- Token: single use, 15 min, must connect within 60 s, locked to model + voice + instruction + transcription + VAD
+  (end-of-speech LOW sensitivity, 900 ms silence, so slow/scared speakers aren't cut off). Rate limit 8 tokens/min/IP.
+  Server log: `voice <lang> <verdict|pending> <status> <ms>` only — never text, never the token.
+- Instruction (voicePrompt.js): built ONLY from the cleaned verdict (verdict/confidence, reasons, steps via cleanList,
+  official contact **re-looked-up in data/official_contacts.json by agency** (caller's phone/url never trusted),
+  familyMessage), language, masked text (mask() again, 1500 chars). Rules: speak <lang>, calm/slow/short, first
+  sentence "Take a breath. You have time.", only facts, no numbers/links/agencies not in facts, out-of-scope → "I don't
+  know, check the official contact", never "ignore it", never "definitely safe", never read [PHONE_1]-style
+  placeholders, not a lawyer, offer once to help tell family ("Ask family").
+- Voice speaks first: client sends `BEGIN` after setupComplete.
+- **Talk mode:** verdict `null` → instruction says the check is running, never hint a verdict; first words "…Let me
+  check that message for you, one moment." `updateVerdict` sends a `KAVACH RESULT` turn with the facts (queued if
+  not connected yet).
+- **Output guard:** after each voice turn, the transcript is checked; a phone number or link that isn't the official
+  one → we send a CORRECTION turn so the voice tells them not to use it. (Never triggered in tests.)
+- **Nemotron follow-ups via /api/chat: skipped** — the verdict already holds everything the voice may say; a second
+  model hop would add 1–3 s per answer, and out-of-scope questions are answered "check the official contact". Easy
+  to add later as a Live tool call if needed.
+- Mic: voice connects and talks at once; mic is attached in parallel. permissions.query → granted: use it; prompt:
+  try getUserMedia 3 s; else open `agent/mic-permission.html` (chrome.tabs.create), wait ≤2 min for a
+  BroadcastChannel("kavach-mic") message, then attach. No mic → speak-only (onMic tells why).
+- 5 s connect timeout (token + socket + setupComplete) → onState("error") + onError. Mid-session drop → same.
+- speakFallback: local voice for that language preferred, rate 0.9, sentence by sentence (Chrome cuts long
+  utterances), resolves false if no voice for that language; safety timeout so it always resolves.
+- VOICE_LANGUAGES: 25 languages common among US immigrants, all in the Live list, with `tts` tags for the fallback.
+
+### PRIVACY NOTE (for Devpost / README — honest wording)
+> **Voice (optional).** When you tap "Talk to Kavach", your voice is streamed to Google's Gemini Live API so it can talk
+> with you, and the conversation is processed by Google. On the free tier, Google may use that data to improve its
+> products. Before anything leaves your computer, Kavach hides personal details in the message (phone numbers, case
+> numbers, emails); the voice assistant only receives the masked message and Kavach's verdict. Our own model (NVIDIA
+> Nemotron) does the scam reasoning; Gemini only speaks the result and answers follow-up questions from it. Kavach's
+> API key never leaves our server; the browser gets a single-use token that expires in 15 minutes. If you don't want
+> your voice sent to Google, don't use Talk — Kavach also reads the result aloud with your browser's built-in voice,
+> which stays on your device.
+
+
 ## Done
+- 2026-11-08: voice.js matches the side panel's call (`await voice.startVoice({verdict, level, lang, text})` + `stopVoice?.()`): session is awaitable (resolves on end, rejects if never connected → panel falls back), `level` goes into the grounded facts ("What the screen shows: …"), `stopVoice()` added. Test: `node agent/test/voice_contract.test.mjs` (5/5), voice_smoke en OK.
 - 2026-11-08 full test run on merged main (Brev): core tests 4/4 · preflight 8/8 · run_deep.mjs 2 32/32 · eval Deep 39/40
   (miss t-hi-07 unknown link, no agency → safe/unsure) · popup_e2e 9/9 (Hindi reasons now translate as full sentences).
   Fixed: preflight "real number" check now skips verdict.officialContact (the official USCIS phone from data/ is
@@ -37,6 +125,8 @@ After fixes (tuned on the same set): Deep 40/40 ×2 — optimistic, don't put on
 - Docs: `agent/EVAL.md` (judge-readable accuracy + slide table), `agent/INTEGRATION.md` (for Role 1).
 
 ## Next
+- Voice: Rafid to test es + hi with a real mic in the side panel once Role 1 wires it (agent/test/voice.html works now).
+- Restart the main server (`npm start`) so it has `/api/voice/token`.
 - Role 1 / 2 / 4 asks below (none block the demo).
 - Re-record `agent/demo_run.json` the night before (see Demo replay / record).
 - Demo laptop: switch the popup to Español, हिन्दी, 中文 once each the day before (first switch downloads the
@@ -200,6 +290,7 @@ cp .env.example .env        # then put your key in .env (never commit it)
 npm start                   # http://localhost:8787 — one log line per request
 npm run smoke               # optional: checks the models still work (hosted)
 ```
+Voice: needs `GEMINI_API_KEY` in .env (startup is fine without it; /api/voice/token then answers 503).
 Health check: `curl -s localhost:8787/api/chat -H 'Content-Type: application/json' -d '{"model":"agent","max_tokens":512,"messages":[{"role":"user","content":"hi"}]}'`
 → JSON with `choices`. (`{}` body → 400 "model must be…" also proves the server is up.)
 
@@ -261,6 +352,8 @@ Hosted-only plan B: `NIM_BACKEND=hosted` in .env, restart, skip 1–2. Tunnel dr
 
 ## Asks for teammates (current, re-checked 2026-11-08 after pulling main)
 - **Role 1 (popup):**
+  - Voice: wire "Talk to Kavach" using agent/INTEGRATION.md → Voice (talk mode + fallback examples). Add the privacy
+    line near the Talk button: "Your voice is sent to Google Gemini. Message details are hidden first."
   - After a Deep Check the verdict hides the checklist (`renderVerdict` sets `checklist-block.hidden = true`), so the
     5 live checks — the "agent at work" moment — vanish. Suggest keeping it under the verdict for deep results:
     `$("checklist-block").hidden = v.mode !== "deep" || !$("checklist").children.length;` (heading "Checks").

@@ -1,0 +1,216 @@
+/* sidepanel/sidepanel.css — Role 1 (UI). PRD section 5 rules, made bigger for older eyes:
+   17px text, high contrast, PRD colors only (red / amber / green + greys), no shadows. */
+:root {
+  --scam: #D93025;
+  --suspicious: #F29900;
+  --safe: #188038;
+  --grey: #5f6368;
+  --line: #dadce0;
+  --fill: #f1f3f4;
+  --fill-hover: #e8eaed;
+  --text: #202124;
+  --pill: 999px;
+  --card: 14px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: #fff;
+  color: var(--text);
+  font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px 8px;
+}
+.brand { font-size: 18px; font-weight: 700; }
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 30px 7px 14px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f6368' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+select:hover { background-color: var(--fill-hover); }
+
+main { padding: 4px 16px 24px; overflow-wrap: anywhere; }
+
+/* ---------- Start ---------- */
+textarea {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--card);
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+textarea::placeholder { color: var(--grey); }
+textarea:focus { outline: none; background: #fff; border-color: var(--grey); }
+
+.problem {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--card);
+  background: var(--fill);
+}
+
+.upload-row { display: flex; align-items: center; min-height: 36px; margin: 10px 0 12px; }
+.upload, .file-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--pill);
+  background: var(--fill);
+  font-size: 16px;
+  font-weight: 500;
+}
+.upload { cursor: pointer; }
+.upload:hover { background: var(--fill-hover); }
+.note { margin: -4px 2px 12px; font-size: 15px; color: var(--grey); }
+
+/* ---------- Buttons ---------- */
+button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--pill);
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+}
+button:hover { background: var(--fill-hover); }
+button.primary { width: 100%; min-height: 52px; background: var(--text); color: #fff; font-size: 18px; }
+button.primary:hover { background: #3c4043; }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible, .upload:focus-within {
+  outline: 3px solid var(--grey);
+  outline-offset: 2px;
+}
+
+button.link {
+  min-height: 0;
+  padding: 4px 0;
+  background: none;
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+button.link:hover { background: none; color: var(--grey); }
+button.link.tiny { font-size: 14px; color: var(--grey); }
+
+a { color: var(--text); text-underline-offset: 3px; }
+a:hover { color: var(--grey); }
+
+/* ---------- Meter ---------- */
+.heading {
+  margin: 18px 0 6px;
+  color: var(--grey);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+#meter-block .heading { margin-top: 4px; }
+
+.level { margin: 0 0 10px; font-size: 26px; font-weight: 700; line-height: 1.2; }
+.level .dot { font-size: 18px; vertical-align: 3px; color: var(--grey); }
+
+.meter { display: flex; gap: 6px; }
+.meter span { flex: 1; height: 14px; border-radius: var(--pill); background: var(--line); }
+
+/* The active step is the only colored one */
+.lvl-highly_likely .dot, .lvl-likely .dot { color: var(--scam); }
+.lvl-unsure .dot { color: var(--suspicious); }
+.lvl-unlikely .dot { color: var(--safe); }
+.lvl-highly_likely .meter [data-step="highly_likely"],
+.lvl-likely .meter [data-step="likely"] { background: var(--scam); }
+.lvl-unsure .meter [data-step="unsure"] { background: var(--suspicious); }
+.lvl-unlikely .meter [data-step="unlikely"] { background: var(--safe); }
+
+/* ---------- Reasons, steps ---------- */
+ul, ol { margin: 0; padding-left: 22px; }
+li + li { margin-top: 6px; }
+li::marker { color: var(--grey); }
+
+.contact { margin: 12px 0 0; line-height: 1.7; }
+.contact .phone { font-weight: 700; white-space: nowrap; }
+
+/* ---------- Help: voice, family, FTC ---------- */
+#help-block { margin-top: 22px; }
+.talk { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 60px; }
+.small { margin: 8px 0 0; font-size: 15px; color: var(--grey); text-align: center; }
+.info {
+  min-height: 0;
+  padding: 0 4px;
+  background: none;
+  color: var(--grey);
+  font-size: 15px;
+  font-weight: 600;
+}
+.info:hover { background: none; color: var(--text); }
+
+.links { display: flex; justify-content: center; gap: 12px; margin: 14px 0 0; }
+.links .sep { color: var(--grey); }
+
+.family-form {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: var(--card);
+  background: var(--fill);
+}
+.family-form p { margin: 0 0 10px; font-weight: 600; }
+.family-form label { display: block; margin-bottom: 10px; font-size: 15px; color: var(--grey); }
+.family-form input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+.form-buttons { display: flex; align-items: center; gap: 16px; }
+.form-buttons .primary { width: auto; min-height: 44px; font-size: 17px; padding: 8px 22px; }
+
+/* ---------- Checklist ---------- */
+#checklist {
+  padding: 12px 14px;
+  border-radius: var(--card);
+  background: var(--fill);
+  list-style: none;
+}
+#checklist:empty { display: none; }
+#checklist li { animation: fade-in 300ms ease-in; }
+.mark { display: inline-block; width: 1.4em; font-weight: 700; color: var(--grey); }
+.mark.fail { color: var(--scam); }
+.mark.pass { color: var(--safe); }
+.detail { color: var(--grey); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.again { display: block; margin: 20px auto 0; }
+
+.status { min-height: 1.5em; margin: 16px 0 0; text-align: center; font-size: 15px; color: var(--grey); }

@@ -1,12 +1,33 @@
 {
   "manifest_version": 3,
   "name": "Kavach",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Catches scam messages in any language and explains them in yours.",
+  "icons": {
+    "16": "sidepanel/icon16.png",
+    "48": "sidepanel/icon48.png",
+    "128": "sidepanel/icon128.png"
+  },
   "action": {
     "default_title": "Kavach",
-    "default_popup": "popup/popup.html"
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "sidepanel/icon16.png",
+      "48": "sidepanel/icon48.png"
+    }
   },
-  "permissions": ["storage"],
-  "host_permissions": ["http://localhost:8787/*"]
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "sidePanel", "scripting", "activeTab", "notifications"],
+  "host_permissions": ["http://localhost:8787/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://example.com/*"],
+      "js": ["sidepanel/test/card-test.js"]
+    }
+  ]
 }
